@@ -12,22 +12,22 @@ Cet outil en ligne de commandes permet de lister, télécharger et téléverser 
 Aucune dépendance n’est requise, le programme peut donc se lancer sans installation :
 ```sh
 # Affiche l’aide
-py ymd.py -h
+py cli.py -h
 # Liste les fichiers téléversés
-py ymd.py list
+py cli.py list
 # Télécharge le fichier "fichier_sur_yahoo.txt" et le sauvegarde dans "fichier_local.txt"
-py ymd.py download fichier_sur_yahoo.txt fichier_local.txt
+py cli.py download fichier_sur_yahoo.txt fichier_local.txt
 # Téléverse le fichier "fichier_local.txt"
-py ymd.py upload fichier_local.txt
+py cli.py upload fichier_local.txt
 ```
 
 Un paramètre `--debug` est disponible pour afficher plus de logs.
 
 ## Paramétrage
 
-Peu de choses ont besoin d’être paramétrées, mais quelques unes peuvent l’être en modifiant `ymd.py` :
+Peu de choses ont besoin d’être paramétrées, mais quelques unes peuvent l’être en modifiant `cli.py` :
 - le nom du dossier créé dans la boîte mail, en modifiant la variable `YMD_FOLDER_NAME` (défaut : `ymd`) ;
-- le niveau de logs par défaut, en modifiant la variable `YMD_DEFAULT_LOG_LEVEL` (défaut : `ymd`) ;
+- le niveau de logs par défaut, en modifiant la variable `YMD_DEFAULT_LOG_LEVEL` (défaut : `logging.ERROR`).
 
 ## Motivation
 

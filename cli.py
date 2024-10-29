@@ -4,9 +4,9 @@ from pathlib import Path
 
 import tomllib
 
-from yahoomail import YahooMailAPI
+from yahoomaildrive import YahooMailDrive
 
-YMD_FOLDER_NAME = "ymd/sous-dossier"
+YMD_FOLDER_NAME = "ymd"
 YMD_DEFAULT_LOG_LEVEL = logging.ERROR
 
 
@@ -15,17 +15,17 @@ def load_credentials(file_path: str) -> tuple[str, str]:
     return data["address"], data["password"]
 
 
-def callback_list_command(_args: argparse.Namespace, ymd: YahooMailAPI) -> None:
+def callback_list_command(_args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "list" de la CLI."""
     print(*ymd.get_files_data().keys(), sep="\n")
 
 
-def callback_download_command(args: argparse.Namespace, ymd: YahooMailAPI) -> None:
+def callback_download_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "download" de la CLI."""
     ymd.download(args.file, args.dest)
 
 
-def callback_upload_command(args: argparse.Namespace, ymd: YahooMailAPI) -> None:
+def callback_upload_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "upload" de la CLI."""
     ymd.upload(args.file)
 
@@ -64,7 +64,14 @@ def main():
     _add_global_arguments(upload_command_parser)
     upload_command_parser.set_defaults(callback=callback_upload_command)
 
+    # Parse les arguments
     args = parser.parse_args()
+
+    # Si aucun argument n’est donné, args est vide et essayer d’accéder à un attribut
+    # lèvera une exception, donc si c’est le cas on affiche l’aide et on s’arrête
+    if not vars(args):
+        parser.print_help()
+        parser.exit(1)
 
     # Effectue les actions globales avant l’exécution des commandes
     # Si --debug est donné, active le debug
@@ -74,7 +81,7 @@ def main():
     address, password = load_credentials(args.credentials)
 
     # Effectue les actions déterminées par les arguments
-    with YahooMailAPI(address, password, folder_name=YMD_FOLDER_NAME) as ymd:
+    with YahooMailDrive(address, password, target_folder=YMD_FOLDER_NAME) as ymd:
         args.callback(args, ymd)
 
 
