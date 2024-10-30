@@ -1,0 +1,53 @@
+stages:
+  - build
+  - upload
+  - release
+
+variables:
+  PACKAGE_NAME: ymd
+  PACKAGE_VERSION: 0.0.1
+  PACKAGE_FILE_NAME: ${PACKAGE_NAME}-${PACKAGE_VERSION}.tar.gz
+
+workflow:
+  rules:
+    # Exécute le pipeline seulement si un tag est créé
+    - if: $CI_COMMIT_TAG
+
+# Construit le paquet Python
+build:
+  stage: build
+  image: ghcr.io/astral-sh/uv:0.4
+  script:
+    - build
+  artifacts:
+    paths:
+      - dist
+
+# Téléverse le paquet vers le registre de paquets GitLab
+# Documentation : https://docs.gitlab.com/ee/user/packages/generic_packages/index.html#publish-a-package-file
+upload_package:
+  stage: upload
+  image: curlimages/curl:latest
+  script:
+    - |
+      curl                                        \
+        --fail-with-body                          \
+        --header "JOB-TOKEN: $CI_JOB_TOKEN"       \
+        --upload-file "dist/${PACKAGE_FILE_NAME}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${PACKAGE_VERSION}/${PACKAGE_FILE_NAME}"
+
+# Crée une release GitLab contenant le paquet
+release_job:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  # Documentation : https://docs.gitlab.com/ee/user/project/releases/release_fields.html#use-a-generic-package-for-attaching-binaries
+  script:
+    - |
+      release-cli create              \
+        --name "v${CI_COMMIT_TAG}"    \
+        --tag-name "${CI_COMMIT_TAG}" \
+        --assets-link "{\"name\":\"${PACKAGE_FILE_NAME}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_FILE_NAME}\"}"
+  # Documentation : https://docs.gitlab.com/ee/ci/yaml/#release
+  release:
+    tag_name: "$CI_COMMIT_TAG"
+    description: "$CI_COMMIT_TAG"
