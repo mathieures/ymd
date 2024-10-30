@@ -3,15 +3,15 @@ stages:
   - upload
   - release
 
-variables:
-  PACKAGE_NAME: ymd
-  PACKAGE_VERSION: 0.0.1
-  PACKAGE_FILE_NAME: ${PACKAGE_NAME}-${PACKAGE_VERSION}.tar.gz
-
 workflow:
   rules:
     # Exécute le pipeline seulement si un tag est créé
     - if: $CI_COMMIT_TAG
+
+variables:
+  PACKAGE_NAME: ymd
+  PACKAGE_VERSION: $CI_COMMIT_TAG
+  PACKAGE_FILE_NAME: $PACKAGE_NAME-$PACKAGE_VERSION.tar.gz
 
 # Construit le paquet Python
 build:
@@ -21,7 +21,7 @@ build:
     - build
   artifacts:
     paths:
-      - dist
+      - dist/
 
 # Téléverse le paquet vers le registre de paquets GitLab
 # Documentation : https://docs.gitlab.com/ee/user/packages/generic_packages/index.html#publish-a-package-file
@@ -49,5 +49,5 @@ release_job:
         --assets-link "{\"name\":\"${PACKAGE_FILE_NAME}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_FILE_NAME}\"}"
   # Documentation : https://docs.gitlab.com/ee/ci/yaml/#release
   release:
-    tag_name: "$CI_COMMIT_TAG"
-    description: "$CI_COMMIT_TAG"
+    tag_name: $CI_COMMIT_TAG
+    description: $CI_COMMIT_TAG
