@@ -16,9 +16,11 @@ variables:
 # Construit le paquet Python
 build:
   stage: build
-  image: ghcr.io/astral-sh/uv:0.4
+  image:
+    name: ghcr.io/astral-sh/uv:0.4-alpine
+    entrypoint: [""]
   script:
-    - build
+    - uv build
   artifacts:
     paths:
       - dist/
