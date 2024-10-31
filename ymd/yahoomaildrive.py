@@ -8,9 +8,9 @@ import typing
 from pathlib import Path
 from types import TracebackType
 
-import file_utils
-import mail_utils
-from mail_utils import YahooMailAPI
+from ymd import file_utils, mail_utils
+from ymd.exceptions import YMDFileAlreadyExists, YMDFileDoesNotExist
+from ymd.mail_utils import YahooMailAPI
 
 
 class YahooMailDrive:
@@ -23,7 +23,10 @@ class YahooMailDrive:
     _target_folder: str  # Chemin du dossier où les mails seront stockés
 
     def __init__(self, address: str, password: str, target_folder: str) -> None:
-        self._ym_api = YahooMailAPI(address, password, target_folder=target_folder)
+        self._target_folder = target_folder
+        self._ym_api = YahooMailAPI(
+            address, password, target_folder=self._target_folder
+        )
 
     def __enter__(self) -> typing.Self:
         return self
@@ -58,7 +61,7 @@ class YahooMailDrive:
         leur nom à une liste contenant les mails de leurs morceaux.
         """
         # Récupère la liste de tous les morceaux
-        mails = self._ym_api.get_all_mails()
+        mails = self._ym_api.get_all_mails(self._target_folder)
 
         result = {}
         # Pour chaque mail, extrait le nom de fichier situé dans son objet
@@ -92,9 +95,7 @@ class YahooMailDrive:
 
         # Si le fichier dont le nom est donné en paramètre n’est pas trouvé, on s’arrête
         if file_name not in files:
-            raise FileNotFoundError(
-                f"The file '{file_name}' was not found on the server."
-            )
+            raise YMDFileDoesNotExist(file_name)
 
         # Si le fichier de destination existe déjà, on s’arrête
         dst_file = Path(dst_path)
@@ -125,7 +126,7 @@ class YahooMailDrive:
         # Si un fichier possédant ce nom a déjà été téléversé, on s’arrête
         logging.debug(f"Checking the existence of {file.name} on the server")
         if file.name in self.get_files_data():
-            raise ValueError(f"A file named '{file.name}' already exists.")
+            raise YMDFileAlreadyExists(file.name)
 
         # Pour chaque indice de début de morceau de fichier
         needed_chunks_count = self._get_chunk_count_for_file(file)
@@ -158,5 +159,5 @@ class YahooMailDrive:
 
             # Ajoute le mail au dossier
             logging.debug(f"Uploading email {attachment_name}")
-            self._ym_api.save_mail(msg)
+            self._ym_api.save_mail(msg, self._target_folder)
             logging.debug(f"Uploaded email {attachment_name}")

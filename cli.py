@@ -3,7 +3,8 @@ import logging
 from pathlib import Path
 
 import tomllib
-from yahoomaildrive import YahooMailDrive
+
+from ymd.yahoomaildrive import YahooMailDrive
 
 YMD_FOLDER_NAME = "ymd"
 YMD_DEFAULT_LOG_LEVEL = logging.ERROR

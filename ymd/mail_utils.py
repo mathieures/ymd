@@ -36,18 +36,17 @@ class YahooMailAPI:
     MAX_ATTACHMENT_SIZE: int = 29 * 2**20  # 29Mo
 
     _imap_connection: imaplib.IMAP4_SSL  # Connexion au serveur IMAP
-    _target_folder: str  # Chemin du dossier où les mails seront stockés
 
     def __init__(self, address: str, password: str, target_folder: str) -> None:
-        self._target_folder = target_folder
-
         logging.debug(f"Connecting to IMAP server: {self.IMAP_SERVER_URL}")
         self._imap_connection = imaplib.IMAP4_SSL(host=self.IMAP_SERVER_URL)
 
         logging.debug(f"Authenticating with address: {address}")
         self._imap_connection.login(address, password)
 
-        self.init_folder()
+        # Crée le dossier de destination dès le début
+        # pour ne pas rencontrer de problème plus tard
+        self.init_folder(target_folder)
 
     def __enter__(self) -> typing.Self:
         return self
@@ -61,25 +60,32 @@ class YahooMailAPI:
         logging.debug(f"Closing connection with IMAP server: {self.IMAP_SERVER_URL}")
         self._imap_connection.__exit__(t, v, tb)
 
-    def init_folder(self) -> None:
+    def _select_folder(self, folder_name: str, readonly: bool = True) -> None:
+        """
+        Wrapper pour sélectionner le dossier dédié
+        avec les droits en lecture seule ou non.
+        """
+        permission = "read-only" if readonly else "write"
+        logging.debug(f"Selecting folder {folder_name} with {permission} permission")
+        self._imap_connection.select(folder_name, readonly=readonly)
+
+    def init_folder(self, folder_name: str) -> None:
         """Crée le dossier dédié s’il n’existe pas."""
 
-        logging.debug(
-            f"Checking the existence of the dedicated folder: {self._target_folder}"
-        )
+        logging.debug(f"Checking the existence of the dedicated folder: {folder_name}")
         folders = extract_list_result(self._imap_connection.list())
-        logging.debug(f"Existing folders: {folders}")
+        logging.debug(f"Existing folders: {list(folders)}")
 
         # Si le dossier n’existe pas, on le crée
-        if self._target_folder not in folders:
-            logging.debug(f"Initializing dedicated folder: {self._target_folder}")
-            self._imap_connection.create(self._target_folder)
+        if folder_name not in folders:
+            logging.debug(f"Initializing dedicated folder: {folder_name}")
+            self._imap_connection.create(folder_name)
 
-    def get_all_mails(self) -> list[Mail]:
-        logging.debug(f"Retrieving all mails in folder: {self._target_folder}")
+    def get_all_mails(self, folder_name: str) -> list[Mail]:
+        logging.debug(f"Retrieving all mails in folder: {folder_name}")
         result = []
 
-        self._imap_connection.select(self._target_folder, readonly=True)
+        self._select_folder(folder_name, readonly=True)
 
         # Récupère la liste des ID des mails présents dans le dossier
         _status, data = self._imap_connection.search(None, "ALL")
@@ -114,15 +120,19 @@ class YahooMailAPI:
         return result
 
     def get_attachment_content_of_mail(self, mail: Mail) -> bytes:
+        """Retourne le contenu de la pièce jointe du mail donné en paramètre."""
         return b64.b64decode(
             extract_fetch_result(
                 self._imap_connection.fetch(mail.mail_id, "(BODY.PEEK[1])")
             )
         )
 
-    def save_mail(self, msg: email.mime.multipart.MIMEMultipart) -> None:
+    def save_mail(
+        self, msg: email.mime.multipart.MIMEMultipart, folder_name: str
+    ) -> None:
+        """Sauvegarde le mail dans le dossier sélectionné au préalable."""
         self._imap_connection.append(
-            self._target_folder,
+            folder_name,
             "",
             imaplib.Time2Internaldate(time.time()),
             msg.as_bytes(),
