@@ -30,6 +30,11 @@ def callback_upload_command(args: argparse.Namespace, ymd: YahooMailDrive) -> No
     ymd.upload(args.file)
 
 
+def callback_remove_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
+    """Callback pour la commande "remove" de la CLI."""
+    ymd.remove(args.file)
+
+
 def _add_global_arguments(parser: argparse.ArgumentParser) -> None:
     """Ajoute les arguments globaux au parser d’argument donné."""
     parser.add_argument(
@@ -69,6 +74,12 @@ def main():
     upload_command_parser.add_argument("file", help="path of the file to upload")
     _add_global_arguments(upload_command_parser)
     upload_command_parser.set_defaults(callback=callback_upload_command)
+
+    # remove
+    remove_command_parser = subparsers.add_parser("remove", aliases=["rm"])
+    remove_command_parser.add_argument("file", help="name of the remote file")
+    _add_global_arguments(remove_command_parser)
+    remove_command_parser.set_defaults(callback=callback_remove_command)
 
     # Parse les arguments
     args = parser.parse_args()

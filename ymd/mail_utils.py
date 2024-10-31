@@ -88,7 +88,7 @@ class YahooMailAPI:
         self._select_folder(folder_name, readonly=True)
 
         # Récupère la liste des ID des mails présents dans le dossier
-        _status, data = self._imap_connection.search(None, "ALL")
+        _status, data = self._imap_connection.uid("SEARCH", "ALL")
         mail_ids: bytes = data[0]
         # Pour chaque ID de mail, récupère l’objet du mail
         for mail_id_bytes in mail_ids.split():
@@ -96,8 +96,8 @@ class YahooMailAPI:
 
             try:
                 subject_data = extract_fetch_result(
-                    self._imap_connection.fetch(
-                        mail_id, "(BODY[HEADER.FIELDS (SUBJECT)])"
+                    self._imap_connection.uid(
+                        "FETCH", mail_id, "(BODY[HEADER.FIELDS (SUBJECT)])"
                     )
                 )
             except ValueError as err:
@@ -123,7 +123,7 @@ class YahooMailAPI:
         """Retourne le contenu de la pièce jointe du mail donné en paramètre."""
         return b64.b64decode(
             extract_fetch_result(
-                self._imap_connection.fetch(mail.mail_id, "(BODY.PEEK[1])")
+                self._imap_connection.uid("FETCH", mail.mail_id, "(BODY.PEEK[1])")
             )
         )
 
@@ -137,6 +137,20 @@ class YahooMailAPI:
             imaplib.Time2Internaldate(time.time()),
             msg.as_bytes(),
         )
+
+    def delete_mail(self, mail: Mail, folder_name: str) -> None:
+        """
+        Supprime le mail donné en paramètre, en essayant un
+        nombre de fois défini : supprimer plusieurs mails
+        rapidement peut obliger le serveur a renvoyer une erreur.
+        """
+        logging.debug(f"Deleting mail: '{mail.subject}' with UID: {mail.mail_id}")
+
+        # Accorde temporairement les droits d’écriture au dossier
+        self._select_folder(folder_name, readonly=False)
+        self._imap_connection.uid("STORE", mail.mail_id, "+FLAGS", r"\Deleted")
+        # Restreint de nouveau les droits sur le dossier
+        self._select_folder(folder_name)
 
 
 def extract_fetch_result(fetch_result: tuple) -> bytes:

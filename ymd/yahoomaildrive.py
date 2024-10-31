@@ -161,3 +161,20 @@ class YahooMailDrive:
             logging.debug(f"Uploading email {attachment_name}")
             self._ym_api.save_mail(msg, self._target_folder)
             logging.debug(f"Uploaded email {attachment_name}")
+
+    def remove(self, file_name: str) -> None:
+        """
+        Supprime le fichier dont le chemin est donné en paramètre
+        en supprimant tous les mails contenant ses morceaux.
+        """
+        # Récupère le nom des fichiers téléversés et
+        # les infos sur les mails de leurs morceaux
+        logging.debug(f"Checking the existence of {file_name} on the server")
+        files = self.get_files_data()
+
+        # Si le fichier dont le nom est donné en paramètre n’est pas trouvé, on s’arrête
+        if file_name not in files:
+            raise YMDFileDoesNotExist(file_name)
+
+        for file_chunk_mail in files[file_name]:
+            self._ym_api.delete_mail(file_chunk_mail, self._target_folder)
