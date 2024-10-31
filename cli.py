@@ -3,7 +3,6 @@ import logging
 from pathlib import Path
 
 import tomllib
-
 from yahoomaildrive import YahooMailDrive
 
 YMD_FOLDER_NAME = "ymd"
@@ -37,6 +36,12 @@ def _add_global_arguments(parser: argparse.ArgumentParser) -> None:
         "--credentials",
         help="path of the credentials file to use",
         default="credentials.toml",
+    )
+    parser.add_argument(
+        "-f",
+        "--folder",
+        help="name of the destination folder",
+        default=YMD_FOLDER_NAME,
     )
     parser.add_argument("--debug", help="enable debug logs", action="store_true")
 
@@ -81,7 +86,7 @@ def main():
     address, password = load_credentials(args.credentials)
 
     # Effectue les actions déterminées par les arguments
-    with YahooMailDrive(address, password, target_folder=YMD_FOLDER_NAME) as ymd:
+    with YahooMailDrive(address, password, target_folder=args.folder) as ymd:
         args.callback(args, ymd)
 
 
