@@ -50,7 +50,3 @@ release_job:
         --name "v${CI_COMMIT_TAG}"    \
         --tag-name "${CI_COMMIT_TAG}" \
         --assets-link "{\"name\":\"${PACKAGE_FILE_NAME}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_FILE_NAME}\"}"
-  # Documentation : https://docs.gitlab.com/ee/ci/yaml/#release
-  release:
-    tag_name: $CI_COMMIT_TAG
-    description: $CI_COMMIT_TAG
