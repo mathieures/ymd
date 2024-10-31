@@ -34,15 +34,16 @@ ymd
 
 Peu importe la façon dont est utilisée la CLI, trois commandes sont disponibles avec des aliases :
 - `list` (alias : `ls`) : liste les fichiers téléversés
-- `download <fichier_sur_yahoo.txt> <fichier_local.txt>` (alias : `d`) : télécharge un fichier
-- `upload <fichier_local.txt>` (alias : `u`) : téléverse un fichier
+- `download <fichier_sur_yahoo> <fichier_local>` (alias : `d`) : télécharge un fichier
+- `upload <fichier_local>` (alias : `u`) : téléverse un fichier
+- `remove <fichier_sur_yahoo>` (alias : `rm`) : supprime un fichier
 
 ### Arguments
 
 Certaines choses peuvent être paramétrées grâce à des arguments de la CLI :
 - le fichier où se trouvent les informations de connexion avec `-c/--credentials` (défaut : `credentials.toml`) ;
 - le dossier de destination des mails avec `-f/--folder` (défaut : `ymd`) ;
-- le mode debug avec `--debug`, qui affiche plus d’informations sur ce qui est fait .
+- le mode debug avec `--debug`, qui affiche plus d’informations sur ce qui est fait.
 
 ## Motivation
 
