@@ -1,3 +1,5 @@
+# Module permettant d’effectuer des actions sur des mails
+
 import base64 as b64
 import email
 import email.header

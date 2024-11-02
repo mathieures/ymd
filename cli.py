@@ -1,18 +1,11 @@
 import argparse
 import logging
-from pathlib import Path
 
-import tomllib
-
+from ymd import file_utils
 from ymd.yahoomaildrive import YahooMailDrive
 
 YMD_FOLDER_NAME = "ymd"
 YMD_DEFAULT_LOG_LEVEL = logging.ERROR
-
-
-def load_credentials(file_path: str) -> tuple[str, str]:
-    data = tomllib.loads(Path(file_path).expanduser().read_text())
-    return data["address"], data["password"]
 
 
 def callback_list_command(_args: argparse.Namespace, ymd: YahooMailDrive) -> None:
@@ -95,7 +88,7 @@ def main():
     log_level = logging.DEBUG if args.debug else YMD_DEFAULT_LOG_LEVEL
     logging.basicConfig(format="%(levelname)s: %(message)s", level=log_level)
     # Charge les informations de connexion
-    address, password = load_credentials(args.credentials)
+    address, password = file_utils.load_credentials(args.credentials)
 
     # Effectue les actions déterminées par les arguments
     with YahooMailDrive(address, password, target_folder=args.folder) as ymd:
