@@ -19,12 +19,25 @@ class Mail:
     mail_id: str  # C’est un entier, mais les fonctions demandent des chaînes
     subject: str
 
+    @classmethod
+    def from_dict(cls, mail_dict: dict[str, str]) -> typing.Self:
+        """
+        Transforme un dictionnaire contenant les données d’un mail en un objet Mail.
+        """
+        return cls(mail_id=mail_dict["mail_id"], subject=mail_dict["subject"])
+
     def __init__(self, mail_id: str, subject: str) -> None:
         self.mail_id = mail_id
         self.subject = subject
 
     def __repr__(self) -> str:
         return f"<Mail({self.mail_id}, {self.subject})>"
+
+    def to_dict(self) -> dict[str, str]:
+        """
+        Retourne un dictionnaire contenant les données du mail, sérialisable en JSON.
+        """
+        return {"mail_id": self.mail_id, "subject": self.subject}
 
 
 class YahooMailAPI:
