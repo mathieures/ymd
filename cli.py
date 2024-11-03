@@ -1,5 +1,6 @@
 import argparse
 import logging
+from pathlib import Path
 
 from ymd import file_utils
 from ymd.yahoomaildrive import YahooMailDrive
@@ -20,7 +21,7 @@ def callback_download_command(args: argparse.Namespace, ymd: YahooMailDrive) -> 
 
 def callback_upload_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "upload" de la CLI."""
-    ymd.upload(args.file)
+    ymd.upload(Path(args.file))
 
 
 def callback_remove_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
@@ -88,7 +89,7 @@ def main():
     log_level = logging.DEBUG if args.debug else YMD_DEFAULT_LOG_LEVEL
     logging.basicConfig(format="%(levelname)s: %(message)s", level=log_level)
     # Charge les informations de connexion
-    address, password = file_utils.load_credentials(args.credentials)
+    address, password = file_utils.load_credentials(Path(args.credentials))
 
     # Effectue les actions déterminées par les arguments
     with YahooMailDrive(address, password, target_folder=args.folder) as ymd:

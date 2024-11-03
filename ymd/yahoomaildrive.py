@@ -5,6 +5,7 @@ import email.mime.multipart
 import email.mime.text
 import logging
 import typing
+from io import BufferedReader, BufferedWriter
 from pathlib import Path
 from types import TracebackType
 
@@ -39,13 +40,26 @@ class YahooMailDrive:
     ) -> None:
         self._ym_api.__exit__(t, v, tb)
 
-    def _get_chunk_count_for_file(self, file: Path) -> int:
+    def _get_chunk_count_for_file(
+        self, file_path: Path, buffer: BufferedReader | None = None
+    ) -> int:
         """
         Retourne le nombre de pièces jointes nécessaires au téléversement
         du fichier passé en paramètre. Si un fichier pèse exactement
         la taille maximale, il n’y aura qu’un seul morceau.
         """
-        length = file.stat().st_size
+        # Les buffers n’ont pas de méthode stat(), on
+        # récupère donc la dernière position disponible
+        if buffer is not None:
+            # Sauvegarde la position du curseur de lecture dans le buffer
+            old_cursor_pos = buffer.tell()
+            # 2 signifie la fin du fichier (voir https://docs.python.org/3/library/io.html#io.IOBase.seek)
+            buffer.seek(0, 2)
+            length = buffer.tell()
+            # Replace le curseur de lecture à l’ancienne position
+            buffer.seek(old_cursor_pos)
+        else:
+            length = file_path.stat().st_size
         return (length // self._ym_api.MAX_ATTACHMENT_SIZE) + 1
 
     def _get_subject_for_file_chunk(self, file_name: str, chunk_index: int) -> str:
@@ -83,11 +97,24 @@ class YahooMailDrive:
 
         return result
 
-    def download(self, file_name: str, dst_path: str) -> None:
+    def download(
+        self, file_name: str, dst_path: str, dst_buffer: BufferedWriter | None = None
+    ) -> None:
         """
-        Télécharge le fichier dont le nom est donné
-        en paramètre vers le chemin donné en paramètre.
+        Télécharge le fichier dont le nom est donné en paramètre
+        vers le chemin ou le buffer donné en paramètre.
         """
+
+        def _download_file_into(file_name: str, dst_buffer: BufferedWriter) -> None:
+            """Télécharge le fichier dont le nom est donné vers le buffer donné."""
+            for file_chunk_mail in files[file_name]:
+                logging.debug(f"Downloading chunk: {file_chunk_mail.subject}")
+                # Télécharge la pièce jointe et écrit son contenu à la fin du fichier
+                written_bytes_count = dst_buffer.write(
+                    self._ym_api.get_attachment_content_of_mail(file_chunk_mail)
+                )
+                logging.debug(f"Wrote {written_bytes_count} bytes")
+
         # Récupère le nom des fichiers téléversés et
         # les infos sur les mails de leurs morceaux
         logging.debug(f"Checking the existence of {file_name} on the server")
@@ -97,42 +124,56 @@ class YahooMailDrive:
         if file_name not in files:
             raise YMDFileDoesNotExist(file_name)
 
-        # Si le fichier de destination existe déjà, on s’arrête
+        # Si le buffer de destination est donné, on écrit dedans
+        if dst_buffer is not None:
+            _download_file_into(file_name, dst_buffer)
+            return
+
+        # Sinon on a le chemin du fichier de destination, donc on
+        # vérifie s’il existe déjà et on s’arrête si c’est le cas
         dst_file = Path(dst_path)
         if dst_file.exists():
-            raise FileExistsError(f"The file '{dst_file}' already exists.")
+            raise FileExistsError(f"The file '{dst_file.resolve()}' already exists.")
 
         # Sinon, on télécharge le fichier grâce à ses morceaux
-        with open(dst_file, "wb") as f:
-            dst_file_realpath = dst_file.resolve()
-            for file_chunk_mail in files[file_name]:
-                logging.debug(f"Downloading chunk: {file_chunk_mail.subject}")
-                # Télécharge la pièce jointe et écrit son contenu à la fin du fichier
-                written_bytes_count = f.write(
-                    self._ym_api.get_attachment_content_of_mail(file_chunk_mail)
-                )
-                logging.debug(
-                    f"Wrote {written_bytes_count} bytes to {dst_file_realpath}"
-                )
+        with open(dst_file, "wb") as file:
+            _download_file_into(file_name, file)
 
-    def upload(self, file_path: str) -> None:
+    def upload(self, file_path: Path, buffer: BufferedReader | None = None) -> None:
         """
-        Téléverse le fichier dont le chemin est donné en paramètre
-        en le découpant en plusieurs morceaux s’il est plus gros
-        que la taille maximale autorisée pour les pièces jointes.
+        Téléverse le fichier dont le chemin est donné en paramètre ou le
+        contenu du buffer donné en le découpant en plusieurs morceaux s’il
+        est plus gros que la taille maximale autorisée pour les pièces jointes.
+        Le chemin donné est également utilisé pour déterminer
+        le nom du fichier sur le serveur une fois téléversé.
         """
-        file = Path(file_path)
+
+        def _create_attachment_with_buffer(buffer: BufferedReader, chunk_index: int):
+            """
+            Retourne une pièce jointe créée avec le morceau du contenu
+            du buffer correspondant à l’indice donné en paramètre.
+            """
+            return email.mime.application.MIMEApplication(
+                file_utils.load_chunk(
+                    buffer,
+                    chunk_start=chunk_index * self._ym_api.MAX_ATTACHMENT_SIZE,
+                    chunk_end=(chunk_index + 1) * self._ym_api.MAX_ATTACHMENT_SIZE,
+                ),
+                _subtype=file_path.name.split(".")[-1],
+            )
 
         # Si un fichier possédant ce nom a déjà été téléversé, on s’arrête
-        logging.debug(f"Checking the existence of {file.name} on the server")
-        if file.name in self.get_files_data():
-            raise YMDFileAlreadyExists(file.name)
+        logging.debug(f"Checking the existence of {file_path.name} on the server")
+        if file_path.name in self.get_files_data():
+            raise YMDFileAlreadyExists(file_path.name)
 
         # Pour chaque indice de début de morceau de fichier
-        needed_chunks_count = self._get_chunk_count_for_file(file)
+        needed_chunks_count = self._get_chunk_count_for_file(file_path, buffer=buffer)
         logging.debug(f"{needed_chunks_count} chunk(s) will be needed")
         for chunk_index in range(needed_chunks_count):
-            attachment_name = self._get_subject_for_file_chunk(file.name, chunk_index)
+            attachment_name = self._get_subject_for_file_chunk(
+                file_path.name, chunk_index
+            )
 
             # Crée un nouveau mail
             msg = email.mime.multipart.MIMEMultipart()
@@ -144,14 +185,12 @@ class YahooMailDrive:
             # msg["To"] = ""
 
             # Ajoute la pièce jointe
-            attachment = email.mime.application.MIMEApplication(
-                file_utils.load_chunk(
-                    file,
-                    chunk_start=chunk_index * self._ym_api.MAX_ATTACHMENT_SIZE,
-                    chunk_end=(chunk_index + 1) * self._ym_api.MAX_ATTACHMENT_SIZE,
-                ),
-                _subtype=file.name.split(".")[-1],
-            )
+            if buffer is None:
+                with open(file_path, "rb") as file:
+                    attachment = _create_attachment_with_buffer(file, chunk_index)
+            else:
+                attachment = _create_attachment_with_buffer(buffer, chunk_index)
+
             attachment.add_header(
                 "Content-Disposition", "attachment", filename=attachment_name
             )
