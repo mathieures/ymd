@@ -103,6 +103,9 @@ class YahooMailDrive:
         """
         Télécharge le fichier dont le nom est donné en paramètre
         vers le chemin ou le buffer donné en paramètre.
+        Peut lever les exceptions suivantes :
+        - YMDFileDoesNotExist si le fichier n’existe pas sur le serveur
+        - FileExistsError si le chemin de destination est occupé par un fichier
         """
 
         def _download_file_into(file_name: str, dst_buffer: BufferedWriter) -> None:
@@ -146,6 +149,8 @@ class YahooMailDrive:
         est plus gros que la taille maximale autorisée pour les pièces jointes.
         Le chemin donné est également utilisé pour déterminer
         le nom du fichier sur le serveur une fois téléversé.
+        Peut lever l’exception suivante :
+        - YMDFileAlreadyExists si le fichier existe déjà sur le serveur
         """
 
         def _create_attachment_with_buffer(buffer: BufferedReader, chunk_index: int):
@@ -205,6 +210,8 @@ class YahooMailDrive:
         """
         Supprime le fichier dont le chemin est donné en paramètre
         en supprimant tous les mails contenant ses morceaux.
+        Peut lever l’exception suivante :
+        - YMDFileDoesNotExist si le fichier n’existe pas sur le serveur
         """
         # Récupère le nom des fichiers téléversés et
         # les infos sur les mails de leurs morceaux

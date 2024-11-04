@@ -97,6 +97,12 @@ class YahooMailAPI:
             self._imap_connection.create(folder_name)
 
     def get_all_mails(self, folder_name: str) -> list[Mail]:
+        """
+        Retourne la liste de tous les mails dans le dossier donné.
+        Peut lever l’exception suivante :
+        - ValueError s’il y a une erreur dans l’analyse d’un objet
+        """
+
         logging.debug(f"Retrieving all mails in folder: {folder_name}")
         result = []
 
@@ -173,6 +179,8 @@ def extract_fetch_result(fetch_result: tuple) -> bytes:
     Retourne le résultat extrait d’une requête fetch, qui
     contrairement à la documentation est un tuple contenant le
     statut en bytes (et non str) et une liste contenant des données.
+    Peut lever l’exception suivante :
+    - ValueError si le résultat n’a pas pu être extrait de la réponse
     """
     _status, data = fetch_result
     data = typing.cast(tuple[bytes], data)
@@ -185,6 +193,8 @@ def extract_list_result(list_result: tuple) -> set[str]:
     """
     Retourne le résultat extrait d’une requête list, qui est un tuple
     contenant le statut en str et une liste contenant des données en bytes.
+    Peut lever l’exception suivante :
+    - ValueError si le résultat n’a pas pu être extrait de la réponse
     """
     _status, data = list_result
     data = typing.cast(list[bytes], data)
