@@ -84,12 +84,17 @@ class YahooMailAPI:
         logging.debug(f"Selecting folder {folder_name} with {permission} permission")
         self._imap_connection.select(folder_name, readonly=readonly)
 
+    def get_all_folders(self) -> list[str]:
+        """Retourne la liste de tous les dossiers disponibles."""
+        folders = extract_list_result(self._imap_connection.list())
+        logging.debug(f"Retrieved folders: {folders}")
+        return folders
+
     def init_folder(self, folder_name: str) -> None:
         """Crée le dossier dédié s’il n’existe pas."""
 
         logging.debug(f"Checking the existence of the dedicated folder: {folder_name}")
-        folders = extract_list_result(self._imap_connection.list())
-        logging.debug(f"Existing folders: {list(folders)}")
+        folders = self.get_all_folders()
 
         # Si le dossier n’existe pas, on le crée
         if folder_name not in folders:
@@ -189,7 +194,7 @@ def extract_fetch_result(fetch_result: tuple) -> bytes:
     return data[0][1]
 
 
-def extract_list_result(list_result: tuple) -> set[str]:
+def extract_list_result(list_result: tuple) -> list[str]:
     """
     Retourne le résultat extrait d’une requête list, qui est un tuple
     contenant le statut en str et une liste contenant des données en bytes.
@@ -198,7 +203,7 @@ def extract_list_result(list_result: tuple) -> set[str]:
     """
     _status, data = list_result
     data = typing.cast(list[bytes], data)
-    result = set()
+    result = []
     for folder_data_bytes in data:
         # Les dossiers suivent la syntaxe suivante : (<flags>) "/" "<chemin_relatif>"
         # où <chemin_relatif> est le chemin du dossier par rapport à la racine.
@@ -206,5 +211,7 @@ def extract_list_result(list_result: tuple) -> set[str]:
         if partitioned_folder[2] == "":
             raise ValueError(f"Could not extract list result from: {data}")
         # Enlève les guillemets au début et à la fin du nom du dossier
-        result.add(partitioned_folder[2].removeprefix(b'"').removesuffix(b'"').decode())
+        result.append(
+            partitioned_folder[2].removeprefix(b'"').removesuffix(b'"').decode()
+        )
     return result

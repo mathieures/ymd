@@ -69,6 +69,10 @@ class YahooMailDrive:
         """
         return f"{file_name}.part{chunk_index + 1}"
 
+    def get_folders(self) -> list[str]:
+        """Retourne la liste de tous les dossiers disponibles."""
+        return self._ym_api.get_all_folders()
+
     def get_files_data(self) -> dict[str, list[mail_utils.Mail]]:
         """
         Retourne un dictionnaire de fichiers téléversés associant
