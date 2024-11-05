@@ -52,16 +52,12 @@ class YahooMailAPI:
 
     _imap_connection: imaplib.IMAP4_SSL  # Connexion au serveur IMAP
 
-    def __init__(self, address: str, password: str, target_folder: str) -> None:
+    def __init__(self, address: str, password: str) -> None:
         logging.debug(f"Connecting to IMAP server: {self.IMAP_SERVER_URL}")
         self._imap_connection = imaplib.IMAP4_SSL(host=self.IMAP_SERVER_URL)
 
         logging.debug(f"Authenticating with address: {address}")
         self._imap_connection.login(address, password)
-
-        # Crée le dossier de destination dès le début
-        # pour ne pas rencontrer de problème plus tard
-        self.init_folder(target_folder)
 
     def __enter__(self) -> typing.Self:
         return self
@@ -90,15 +86,15 @@ class YahooMailAPI:
         logging.debug(f"Retrieved folders: {folders}")
         return folders
 
-    def init_folder(self, folder_name: str) -> None:
-        """Crée le dossier dédié s’il n’existe pas."""
+    def create_folder(self, folder_name: str) -> None:
+        """Crée le dossier donné s’il n’existe pas."""
 
-        logging.debug(f"Checking the existence of the dedicated folder: {folder_name}")
+        logging.debug(f"Checking the existence of the folder: {folder_name}")
         folders = self.get_all_folders()
 
         # Si le dossier n’existe pas, on le crée
         if folder_name not in folders:
-            logging.debug(f"Initializing dedicated folder: {folder_name}")
+            logging.debug(f"Creating folder: {folder_name}")
             self._imap_connection.create(folder_name)
 
     def get_all_mails(self, folder_name: str) -> list[Mail]:

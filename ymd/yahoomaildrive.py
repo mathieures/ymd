@@ -23,11 +23,22 @@ class YahooMailDrive:
     _ym_api: YahooMailAPI
     _target_folder: str  # Chemin du dossier où les mails seront stockés
 
+    @property
+    def target_folder(self) -> str:
+        return self._target_folder
+
+    @target_folder.setter
+    def target_folder(self, folder_name: str) -> None:
+        # Crée le dossier donné s’il n’existe pas
+        self._ym_api.create_folder(folder_name)
+        self._target_folder = folder_name
+
     def __init__(self, address: str, password: str, target_folder: str) -> None:
         self._target_folder = target_folder
-        self._ym_api = YahooMailAPI(
-            address, password, target_folder=self._target_folder
-        )
+        self._ym_api = YahooMailAPI(address, password)
+        # Crée le dossier de destination dès le début
+        # pour ne pas rencontrer de problème plus tard
+        self._ym_api.create_folder(self._target_folder)
 
     def __enter__(self) -> typing.Self:
         return self
