@@ -118,7 +118,7 @@ class YahooMailDrive:
         return result
 
     def download(
-        self, file_name: str, dst_path: str, dst_buffer: BufferedWriter | None = None
+        self, file_name: str, dst_path_or_buffer: str | BufferedWriter
     ) -> None:
         """
         Télécharge le fichier dont le nom est donné en paramètre
@@ -147,20 +147,25 @@ class YahooMailDrive:
         if file_name not in files:
             raise YMDFileDoesNotExist(file_name)
 
-        # Si le buffer de destination est donné, on écrit dedans
-        if dst_buffer is not None:
-            _download_file_into(file_name, dst_buffer)
+        # Si le paramètre donné est une chaîne de caractère,
+        # on sait que c’est un chemin de fichier
+        if isinstance(dst_path_or_buffer, str):
+            # Sinon on a le chemin du fichier de destination, donc on
+            # vérifie s’il existe déjà et on s’arrête si c’est le cas
+            dst_file = Path(dst_path_or_buffer)
+            if dst_file.exists():
+                raise FileExistsError(
+                    f"The file '{dst_file.resolve()}' already exists."
+                )
+
+            # Sinon, on télécharge le fichier grâce à ses morceaux
+            with open(dst_file, "wb") as file:
+                _download_file_into(file_name, file)
             return
 
-        # Sinon on a le chemin du fichier de destination, donc on
-        # vérifie s’il existe déjà et on s’arrête si c’est le cas
-        dst_file = Path(dst_path)
-        if dst_file.exists():
-            raise FileExistsError(f"The file '{dst_file.resolve()}' already exists.")
-
-        # Sinon, on télécharge le fichier grâce à ses morceaux
-        with open(dst_file, "wb") as file:
-            _download_file_into(file_name, file)
+        # Sinon un buffer de destination est donné, alors on écrit dedans
+        if dst_path_or_buffer is not None:
+            _download_file_into(file_name, dst_path_or_buffer)
 
     def upload(self, file_path: Path, buffer: BufferedReader | None = None) -> None:
         """
