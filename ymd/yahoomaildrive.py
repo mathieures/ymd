@@ -90,7 +90,12 @@ class YahooMailDrive:
         leur nom à une liste contenant les mails de leurs morceaux.
         """
         # Récupère la liste de tous les morceaux
-        mails = self._ym_api.get_all_mails(self._target_folder)
+        try:
+            mails = self._ym_api.get_all_mails(self._target_folder)
+        except ValueError as err:
+            raise ValueError(
+                f"Could not get the files data in {self._target_folder}"
+            ) from err
 
         result = {}
         # Pour chaque mail, extrait le nom de fichier situé dans son objet

@@ -107,25 +107,45 @@ class YahooMailAPI:
         logging.debug(f"Retrieving all mails in folder: {folder_name}")
         result = []
 
-        self._select_folder(folder_name, readonly=True)
+        self._select_folder(folder_name)
 
         # Récupère la liste des ID des mails présents dans le dossier
         _status, data = self._imap_connection.uid("SEARCH", "ALL")
-        mail_ids: bytes = data[0]
+        mail_ids: bytes | None = data[0]
+        if mail_ids is None:
+            raise ValueError(f"The server replied with an empty response: {data}")
+
+        logging.debug(f"Retrieved mail IDs: {mail_ids}")
+
         # Pour chaque ID de mail, récupère l’objet du mail
         for mail_id_bytes in mail_ids.split():
             mail_id = mail_id_bytes.decode()  # Entier sous forme de bytes (ex : b"1")
 
-            try:
-                subject_data = extract_fetch_result(
-                    self._imap_connection.uid(
-                        "FETCH", mail_id, "(BODY[HEADER.FIELDS (SUBJECT)])"
-                    )
+            # Essaie de récupérer l’objet du mail plusieurs fois
+            # TODO : trouver pourquoi la réponse de
+            # la commande FETCH peut être ("OK", [None])
+            max_attempts = 20
+            for attempt in range(1, max_attempts + 1):
+                logging.debug(
+                    f"Retrieving subject for mail ID {mail_id} "
+                    f"(attempt {attempt}/{max_attempts})"
                 )
-            except ValueError as err:
+                fetch_result = self._imap_connection.uid(
+                    "FETCH", mail_id, "(BODY[HEADER.FIELDS (SUBJECT)])"
+                )
+                logging.debug(f"The fetch command returned: {fetch_result}")
+                if fetch_result[1][0] is not None:
+                    subject_data = extract_fetch_result(fetch_result)
+                    break
+                logging.warning(
+                    f"Failed to retrieve subject for mail ID {mail_id} "
+                    f"(attempt {attempt}/{max_attempts})"
+                )
+            # S’il n’y a pas eu de break, il y a eu des erreurs
+            else:
                 raise ValueError(
-                    f"Could not parse the subject in data: {data}"
-                ) from err
+                    f"Could not parse the subject in data: {data=}, {mail_id=}"
+                )
 
             encoded_subject = subject_data.removeprefix(b"Subject: ")
 
@@ -186,7 +206,7 @@ def extract_fetch_result(fetch_result: tuple) -> bytes:
     _status, data = fetch_result
     data = typing.cast(tuple[bytes], data)
     if data[0] is None or isinstance(data[0][1], int):
-        raise ValueError(f"Could not extract fetch result from: {data}")
+        raise ValueError(f"Could not extract fetch result from: {fetch_result}")
     return data[0][1]
 
 
