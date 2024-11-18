@@ -111,7 +111,10 @@ class YahooMailAPI:
         _status, data = self._imap_connection.uid("SEARCH", "ALL")
         mail_ids: bytes | None = data[0]
         if mail_ids is None:
-            raise ValueError(f"The server replied with an empty response: {data}")
+            raise ValueError(
+                f"Could not retrieve the mails in folder {folder_name}: "
+                f"the server's reply was empty ({data})"
+            )
 
         mail_ids_str = mail_ids.decode().split()
 
@@ -126,7 +129,14 @@ class YahooMailAPI:
         )
 
         # Extrait et renverse les données car le serveur répond à l’envers
-        data = extract_fetch_result(fetch_result)[::-1]
+        try:
+            data = extract_fetch_result(fetch_result)[::-1]
+        except ValueError as err:
+            raise ValueError(
+                f"Could not retrieve the mails in folder {folder_name}: "
+                f"the server's reply was invalid ({fetch_result}). "
+                "Could there be other operations in progress?"
+            ) from err
 
         for mail_id, subject_data in zip(mail_ids_str, data):
             encoded_subject = subject_data.removeprefix(b"Subject: ")
