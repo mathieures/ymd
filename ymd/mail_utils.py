@@ -105,8 +105,6 @@ class YahooMailAPI:
         """
 
         logging.debug(f"Retrieving all mails in folder: {folder_name}")
-        result = []
-
         self._select_folder(folder_name)
 
         # Récupère la liste des ID des mails présents dans le dossier
@@ -115,38 +113,22 @@ class YahooMailAPI:
         if mail_ids is None:
             raise ValueError(f"The server replied with an empty response: {data}")
 
-        logging.debug(f"Retrieved mail IDs: {mail_ids}")
+        mail_ids_str = mail_ids.decode().split()
 
-        # Pour chaque ID de mail, récupère l’objet du mail
-        for mail_id_bytes in mail_ids.split():
-            mail_id = mail_id_bytes.decode()  # Entier sous forme de bytes (ex : b"1")
+        logging.debug(f"Retrieved mail IDs: {mail_ids_str}")
 
-            # Essaie de récupérer l’objet du mail plusieurs fois
-            # TODO : trouver pourquoi la réponse de
-            # la commande FETCH peut être ("OK", [None])
-            max_attempts = 20
-            for attempt in range(1, max_attempts + 1):
-                logging.debug(
-                    f"Retrieving subject for mail ID {mail_id} "
-                    f"(attempt {attempt}/{max_attempts})"
-                )
-                fetch_result = self._imap_connection.uid(
-                    "FETCH", mail_id, "(BODY[HEADER.FIELDS (SUBJECT)])"
-                )
-                logging.debug(f"The fetch command returned: {fetch_result}")
-                if fetch_result[1][0] is not None:
-                    subject_data = extract_fetch_result(fetch_result)
-                    break
-                logging.warning(
-                    f"Failed to retrieve subject for mail ID {mail_id} "
-                    f"(attempt {attempt}/{max_attempts})"
-                )
-            # S’il n’y a pas eu de break, il y a eu des erreurs
-            else:
-                raise ValueError(
-                    f"Could not parse the subject in data: {data=}, {mail_id=}"
-                )
+        result = []
 
+        # On peut demander des informations sur tous les mails
+        # en même temps si on sépare les UID par des virgules
+        fetch_result = self._imap_connection.uid(
+            "FETCH", ",".join(mail_ids_str), "(BODY[HEADER.FIELDS (SUBJECT)])"
+        )
+
+        # Extrait et renverse les données car le serveur répond à l’envers
+        data = extract_fetch_result(fetch_result)[::-1]
+
+        for mail_id, subject_data in zip(mail_ids_str, data):
             encoded_subject = subject_data.removeprefix(b"Subject: ")
 
             # Si l’objet du mail contient des caractères
@@ -163,11 +145,10 @@ class YahooMailAPI:
 
     def get_attachment_content_of_mail(self, mail: Mail) -> bytes:
         """Retourne le contenu de la pièce jointe du mail donné en paramètre."""
-        return b64.b64decode(
-            extract_fetch_result(
-                self._imap_connection.uid("FETCH", mail.mail_id, "(BODY.PEEK[1])")
-            )
+        fetch_result = self._imap_connection.uid(
+            "FETCH", mail.mail_id, "(BODY.PEEK[1])"
         )
+        return b64.b64decode(extract_fetch_result(fetch_result)[0])
 
     def save_mail(
         self, msg: email.mime.multipart.MIMEMultipart, folder_name: str
@@ -195,7 +176,7 @@ class YahooMailAPI:
         self._select_folder(folder_name)
 
 
-def extract_fetch_result(fetch_result: tuple) -> bytes:
+def extract_fetch_result(fetch_result: tuple) -> list[bytes]:
     """
     Retourne le résultat extrait d’une requête fetch, qui
     contrairement à la documentation est un tuple contenant le
@@ -204,10 +185,13 @@ def extract_fetch_result(fetch_result: tuple) -> bytes:
     - ValueError si le résultat n’a pas pu être extrait de la réponse
     """
     _status, data = fetch_result
-    data = typing.cast(tuple[bytes], data)
+    # Les données sont un ou des tuples suivi(s) d’un objet bytes constant : b")".
+    # Les tuples contiennent deux objets bytes : les métadonnées et les données,
+    # donc on extrait à chaque fois le second élément de chaque tuple.
+    data = typing.cast(list[tuple[bytes, bytes] | bytes], data)
     if data[0] is None or isinstance(data[0][1], int):
         raise ValueError(f"Could not extract fetch result from: {fetch_result}")
-    return data[0][1]
+    return [t[1] for t in data[::2]]  # type: ignore
 
 
 def extract_list_result(list_result: tuple) -> list[str]:
