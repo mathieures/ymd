@@ -229,7 +229,6 @@ class YahooMailDrive:
             # Ajoute le mail au dossier
             logging.debug(f"Uploading email {attachment_name}")
             self._ym_api.save_mail(msg, self._target_folder)
-            logging.debug(f"Uploaded email {attachment_name}")
 
     def remove(self, file_name: str) -> None:
         """
