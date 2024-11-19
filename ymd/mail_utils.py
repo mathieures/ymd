@@ -103,7 +103,6 @@ class YahooMailAPI:
         Peut lever l’exception suivante :
         - ValueError s’il y a une erreur dans l’analyse d’un objet
         """
-
         logging.debug(f"Retrieving all mails in folder: {folder_name}")
         self._select_folder(folder_name)
 
@@ -117,10 +116,13 @@ class YahooMailAPI:
             )
 
         mail_ids_str = mail_ids.decode().split()
-
         logging.debug(f"Retrieved mail IDs: {mail_ids_str}")
 
         result = []
+
+        # S’il n’y avait aucun mail dans le dossier, on retourne une liste vide
+        if not mail_ids_str:
+            return result
 
         # On peut demander des informations sur tous les mails
         # en même temps si on sépare les UID par des virgules
