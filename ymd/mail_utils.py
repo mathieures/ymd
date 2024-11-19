@@ -165,10 +165,13 @@ class YahooMailAPI:
     def save_mail(
         self, msg: email.mime.multipart.MIMEMultipart, folder_name: str
     ) -> None:
-        """Sauvegarde le mail dans le dossier sélectionné au préalable."""
+        """
+        Sauvegarde le mail dans le dossier donné en le rendant
+        « lu » pour ne pas être confondu avec un vrai mail.
+        """
         self._imap_connection.append(
             folder_name,
-            "",
+            r"\Seen",
             imaplib.Time2Internaldate(time.time()),
             msg.as_bytes(),
         )
