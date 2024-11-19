@@ -248,3 +248,10 @@ class YahooMailDrive:
 
         for file_chunk_mail in files[file_name]:
             self._ym_api.delete_mail(file_chunk_mail, self._target_folder)
+
+    def logout(self) -> None:
+        """
+        Clôt la connexion au serveur IMAP. Toutes  les commandes
+        suivantes lèveront une erreur imaplib.IMAP4.error.
+        """
+        self._ym_api.logout()

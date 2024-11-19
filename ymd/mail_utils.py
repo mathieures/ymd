@@ -190,6 +190,13 @@ class YahooMailAPI:
         # Restreint de nouveau les droits sur le dossier
         self._select_folder(folder_name)
 
+    def logout(self) -> None:
+        """
+        Clôt la connexion au serveur IMAP. Toutes  les commandes
+        suivantes lèveront une erreur imaplib.IMAP4.error.
+        """
+        self._imap_connection.logout()
+
 
 def extract_fetch_result(fetch_result: tuple) -> list[bytes]:
     """
