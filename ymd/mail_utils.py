@@ -77,31 +77,50 @@ class YahooMailAPI:
         logging.debug(f"Closing connection with IMAP server: {self.IMAP_SERVER_URL}")
         self._imap_connection.__exit__(t, v, tb)
 
-    def _select_folder(self, folder_name: str, readonly: bool = True) -> None:
+    def _select_folder(self, folder_name: str, *, readonly: bool = True) -> None:
         """
         Wrapper pour sélectionner le dossier dédié
         avec les droits en lecture seule ou non.
         """
         permission = "read-only" if readonly else "write"
         logging.debug(f"Selecting folder {folder_name} with {permission} permission")
-        self._imap_connection.select(folder_name, readonly=readonly)
+        self._imap_connection.select(encode_folder_name(folder_name), readonly=readonly)
 
     def get_all_folders(self) -> list[str]:
         """Retourne la liste de tous les dossiers disponibles."""
         folders = extract_list_result(self._imap_connection.list())
+        # Enlève l’échappement sur les guillemets doubles qu’imaplib met en
+        # place et décode les caractères encodés en une variante de l’UTF-7
+        folders = [decode_folder_name(folder.replace(r"\"", '"')) for folder in folders]
+
         logging.debug(f"Retrieved folders: {folders}")
         return folders
 
     def create_folder(self, folder_name: str) -> None:
-        """Crée le dossier donné s’il n’existe pas."""
-
+        """
+        Crée le dossier donné s’il n’existe pas, en créant tous
+        les dossiers parents si le nom donné contient des slashes.
+        """
         logging.debug(f"Checking the existence of the folder: {folder_name}")
         folders = self.get_all_folders()
 
-        # Si le dossier n’existe pas, on le crée
-        if folder_name not in folders:
-            logging.debug(f"Creating folder: {folder_name}")
-            self._imap_connection.create(folder_name)
+        # Si le dossier existe, on s’arrête
+        if folder_name in folders:
+            logging.debug(f"Folder {folder_name} already exists")
+            return
+
+        # Si le nom contient des slashes, il est composé de sous-dossiers, donc
+        # on crée chaque sous-dossier pour éviter des problèmes : YahooMail ne
+        # fonctionne pas correctement si on crée un sous-dossier sans ses parents
+        path_separator = "/"
+        subfolders = folder_name.split(path_separator)
+        for subfolder_index in range(len(subfolders)):
+            # Crée le sous-dossier arrivant jusqu’au sous-dossier actuel
+            subfolder = path_separator.join(subfolders[: subfolder_index + 1])
+            if subfolder in folders:
+                continue
+            logging.debug(f"Creating folder: {subfolder}")
+            self._imap_connection.create(encode_folder_name(subfolder))
 
     def get_all_mails(self, folder_name: str) -> list[Mail]:
         """
@@ -169,7 +188,7 @@ class YahooMailAPI:
         « lu » pour ne pas être confondu avec un vrai mail.
         """
         self._imap_connection.append(
-            folder_name,
+            encode_folder_name(folder_name),
             r"\Seen",
             imaplib.Time2Internaldate(time.time()),
             msg.as_bytes(),
@@ -235,3 +254,76 @@ def extract_list_result(list_result: tuple) -> list[str]:
             partitioned_folder[2].removeprefix(b'"').removesuffix(b'"').decode()
         )
     return result
+
+
+def encode_folder_name(folder_name: str) -> str:
+    """
+    Encode le nom de dossier donné selon la RFC2060
+    qui définit une variante de l’UTF-7.
+    Inspiré de https://stackoverflow.com/a/45787169/14349477
+    """
+
+    def encode_chars(chars_to_encode: list[str]) -> str:
+        """
+        Encode les caractères donnés selon du base 64
+        modifié : "+" devient "&" et "/" devient ",".
+        """
+        encoded_str = "".join(chars_to_encode).encode("utf-7").decode()
+        return encoded_str.replace("+", "&").replace("/", ",")
+
+    result: list[str] = []
+    chars_to_encode: list[str] = []
+    for char in folder_name:
+        # Le caractère "&" (0x26) est encodé en "&-"
+        if char == "&":
+            # Si on a des caractères à encoder, on le fait
+            if chars_to_encode:
+                result.append(encode_chars(chars_to_encode))
+                chars_to_encode.clear()
+            result.append("&-")
+            continue
+
+        # Les caractères de 0x20 à 0x25 et de 0x27 à 0x7e ne sont pas encodés
+        if ord(char) in range(0x20, 0x7E):
+            # Si on a des caractères à encoder, on le fait
+            if chars_to_encode:
+                result.append(encode_chars(chars_to_encode))
+                chars_to_encode.clear()
+            result.append(char)
+            continue
+
+        # Sinon on est dans une portion de caractères à encoder
+        chars_to_encode.append(char)
+
+    # S’il reste des caractères à encoder à la fin, on les ajoute au résultat
+    if chars_to_encode:
+        result.append(encode_chars(chars_to_encode))
+
+    # Lie tous les caractères et échappe les backslashes
+    return f'"{"".join(result)}"'.replace("\\", "\\\\")
+
+
+def decode_folder_name(encoded_folder_name: str) -> str:
+    """
+    Décode le nom de dossier donné selon la RFC2060
+    qui définit une variante de l’UTF-7.
+    Inspiré de https://stackoverflow.com/a/45787169/14349477
+    """
+    result = []
+    folder_name_parts = encoded_folder_name.split("&")
+    # Le premier élément est soit vide, soit des caractères normaux
+    result.append(folder_name_parts[0])
+    for part in folder_name_parts[1:]:
+        # On cherche le "-" qui est la fin du ou des caractères encodés
+        encoded_chars, normal_chars = part.split("-", maxsplit=1)
+        # Si le premier élément est vide, on avait donc "&-"
+        if not encoded_chars:
+            result.append("&")
+        # Sinon on a bien des caractères encodés
+        decoded_chars = f"+{encoded_chars.replace(",","/")}".encode().decode("utf-7")
+        # Ajoute les caractères encodés puis les normaux
+        result.append(decoded_chars)
+        result.append(normal_chars)
+
+    # Lie tous les caractères et déséchappe les backslashes
+    return "".join(result).replace("\\\\", "\\")

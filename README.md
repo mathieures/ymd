@@ -45,6 +45,12 @@ Certaines choses peuvent être paramétrées grâce à des arguments de la CLI 
 - le dossier de destination des mails avec `-f/--folder` (défaut : `ymd`) ;
 - le mode debug avec `--debug`, qui affiche plus d’informations sur ce qui est fait.
 
+## Tâches manuelles
+
+Bien que la CLI permette d’effectuer la plupart des actions voulues, elle n’offre pas autant de fonctionnalités que le site web officiel ; aussi les actions suivantes sont impossibles avec la CLI :
+- supprimer un dossier ;
+- créer un dossier sans téléverser de fichier.
+
 ## Motivation
 
 YahooMail propose 1To de stockage de mail gratuit, mais restreint la taille des pièces jointes. 1To de stockage en ligne gratuit n’étant pas négligeable de nos jours, ce projet est né de la volonté de profiter de ce stockage sans limite de taille de fichier.
