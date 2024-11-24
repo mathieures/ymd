@@ -299,8 +299,8 @@ def encode_folder_name(folder_name: str) -> str:
     if chars_to_encode:
         result.append(encode_chars(chars_to_encode))
 
-    # Lie tous les caractères et échappe les backslashes
-    return f'"{"".join(result)}"'.replace("\\", "\\\\")
+    # Lie tous les caractères et échappe les backslashes et les guillemets doubles
+    return f'"{"".join(result).replace("\\", "\\\\").replace('"', r"\"")}"'
 
 
 def decode_folder_name(encoded_folder_name: str) -> str:
