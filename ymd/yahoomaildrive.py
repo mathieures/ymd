@@ -10,8 +10,12 @@ from pathlib import Path
 from types import TracebackType
 
 from ymd import file_utils, mail_utils
-from ymd.exceptions import YMDFileAlreadyExists, YMDFileDoesNotExist
-from ymd.mail_utils import YahooMailAPI
+from ymd.exceptions import (
+    YMDFileAlreadyExists,
+    YMDFileDoesNotExist,
+    YMDFilesRetrievalError,
+    YMDMailsRetrievalError,
+)
 
 
 class YahooMailDrive:
@@ -20,7 +24,7 @@ class YahooMailDrive:
     lister, télécharger et téléverser des fichiers.
     """
 
-    _ym_api: YahooMailAPI
+    _ym_api: mail_utils.YahooMailAPI
     _target_folder: str  # Chemin du dossier où les mails seront stockés
 
     @property
@@ -34,8 +38,9 @@ class YahooMailDrive:
         self._target_folder = folder_name
 
     def __init__(self, address: str, password: str, target_folder: str) -> None:
+        # Sauvegarde la valeur brute du nom du dossier voulu par l’utilisateur
         self._target_folder = target_folder
-        self._ym_api = YahooMailAPI(address, password)
+        self._ym_api = mail_utils.YahooMailAPI(address, password)
         # Crée le dossier de destination dès le début
         # pour ne pas rencontrer de problème plus tard
         self._ym_api.create_folder(self._target_folder)
@@ -92,10 +97,8 @@ class YahooMailDrive:
         # Récupère la liste de tous les morceaux
         try:
             mails = self._ym_api.get_all_mails(self._target_folder)
-        except ValueError as err:
-            raise ValueError(
-                f"Could not get the files data in {self._target_folder}"
-            ) from err
+        except YMDMailsRetrievalError as err:
+            raise YMDFilesRetrievalError(self._target_folder) from err
 
         result = {}
         # Pour chaque mail, extrait le nom de fichier situé dans son objet
@@ -154,12 +157,10 @@ class YahooMailDrive:
             # vérifie s’il existe déjà et on s’arrête si c’est le cas
             dst_file = Path(dst_path_or_buffer)
             if dst_file.exists():
-                raise FileExistsError(
-                    f"The file '{dst_file.resolve()}' already exists."
-                )
+                raise FileExistsError(dst_file.resolve())
 
             # Sinon, on télécharge le fichier grâce à ses morceaux
-            with open(dst_file, "wb") as file:
+            with dst_file.open("wb") as file:
                 _download_file_into(file_name, file)
             return
 
@@ -178,7 +179,9 @@ class YahooMailDrive:
         - YMDFileAlreadyExists si le fichier existe déjà sur le serveur
         """
 
-        def _create_attachment_with_buffer(buffer: BufferedReader, chunk_index: int):
+        def _create_attachment_with_buffer(
+            buffer: BufferedReader, chunk_index: int
+        ) -> email.mime.application.MIMEApplication:
             """
             Retourne une pièce jointe créée avec le morceau du contenu
             du buffer correspondant à l’indice donné en paramètre.
@@ -216,7 +219,7 @@ class YahooMailDrive:
 
             # Ajoute la pièce jointe
             if buffer is None:
-                with open(file_path, "rb") as file:
+                with file_path.open("rb") as file:
                     attachment = _create_attachment_with_buffer(file, chunk_index)
             else:
                 attachment = _create_attachment_with_buffer(buffer, chunk_index)

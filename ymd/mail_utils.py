@@ -12,6 +12,12 @@ import time
 import typing
 from types import TracebackType
 
+from ymd.exceptions import (
+    YMDFetchResultExtractionError,
+    YMDListResultExtractionError,
+    YMDMailsRetrievalError,
+)
+
 
 class Mail:
     """Classe représentant très simplement un mail grâce à son ID et son objet."""
@@ -101,7 +107,7 @@ class YahooMailAPI:
         """
         Retourne la liste de tous les mails dans le dossier donné.
         Peut lever l’exception suivante :
-        - ValueError s’il y a une erreur dans l’analyse d’un objet
+        - YMDMailsRetrievalError si la réponse du serveur IMAP est invalide
         """
         logging.debug(f"Retrieving all mails in folder: {folder_name}")
         self._select_folder(folder_name)
@@ -110,10 +116,7 @@ class YahooMailAPI:
         _status, data = self._imap_connection.uid("SEARCH", "ALL")
         mail_ids: bytes | None = data[0]
         if mail_ids is None:
-            raise ValueError(
-                f"Could not retrieve the mails in folder {folder_name}: "
-                f"the server's reply was empty ({data})"
-            )
+            raise YMDMailsRetrievalError(folder_name, server_reply=data)
 
         mail_ids_str = mail_ids.decode().split()
         logging.debug(f"Retrieved mail IDs: {mail_ids_str}")
@@ -133,12 +136,8 @@ class YahooMailAPI:
         # Extrait et renverse les données car le serveur répond à l’envers
         try:
             data = extract_fetch_result(fetch_result)[::-1]
-        except ValueError as err:
-            raise ValueError(
-                f"Could not retrieve the mails in folder {folder_name}: "
-                f"the server's reply was invalid ({fetch_result}). "
-                "Could there be other operations in progress?"
-            ) from err
+        except YMDFetchResultExtractionError as err:
+            raise YMDMailsRetrievalError(folder_name, server_reply=data) from err
 
         for mail_id, subject_data in zip(mail_ids_str, data):
             encoded_subject = subject_data.removeprefix(b"Subject: ")
@@ -204,16 +203,15 @@ def extract_fetch_result(fetch_result: tuple) -> list[bytes]:
     contrairement à la documentation est un tuple contenant le
     statut en bytes (et non str) et une liste contenant des données.
     Peut lever l’exception suivante :
-    - ValueError si le résultat n’a pas pu être extrait de la réponse
+    - YMDFetchResultExtractionError si le résultat n’a pas pu être extrait de la réponse
     """
     _status, data = fetch_result
     # Les données sont un ou des tuples suivi(s) d’un objet bytes constant : b")".
     # Les tuples contiennent deux objets bytes : les métadonnées et les données,
     # donc on extrait à chaque fois le second élément de chaque tuple.
-    data = typing.cast(list[tuple[bytes, bytes] | bytes], data)
-    if data[0] is None or isinstance(data[0][1], int):
-        raise ValueError(f"Could not extract fetch result from: {fetch_result}")
-    return [t[1] for t in data[::2]]  # type: ignore
+    if data[0] is None:
+        raise YMDFetchResultExtractionError(fetch_result)
+    return [t[1] for t in data[::2]]
 
 
 def extract_list_result(list_result: tuple) -> list[str]:
@@ -221,7 +219,7 @@ def extract_list_result(list_result: tuple) -> list[str]:
     Retourne le résultat extrait d’une requête list, qui est un tuple
     contenant le statut en str et une liste contenant des données en bytes.
     Peut lever l’exception suivante :
-    - ValueError si le résultat n’a pas pu être extrait de la réponse
+    - YMDListResultExtractionError si le résultat n’a pas pu être extrait de la réponse
     """
     _status, data = list_result
     data = typing.cast(list[bytes], data)
@@ -231,7 +229,7 @@ def extract_list_result(list_result: tuple) -> list[str]:
         # où <chemin_relatif> est le chemin du dossier par rapport à la racine.
         partitioned_folder = folder_data_bytes.partition(b' "/" ')
         if partitioned_folder[2] == "":
-            raise ValueError(f"Could not extract list result from: {data}")
+            raise YMDListResultExtractionError(list_result)
         # Enlève les guillemets au début et à la fin du nom du dossier
         result.append(
             partitioned_folder[2].removeprefix(b'"').removesuffix(b'"').decode()
