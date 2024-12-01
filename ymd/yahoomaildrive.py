@@ -212,10 +212,8 @@ class YahooMailDrive:
             msg = email.mime.multipart.MIMEMultipart()
 
             # Définit l’objet comme le nom du morceau pour tous les retrouver facilement
+            # Note : l’expéditeur et le destinataire ne sont pas nécessaires
             msg["Subject"] = attachment_name
-            # L’expéditeur et le destinataire ne sont pas nécessaires
-            # msg["From"] = ""
-            # msg["To"] = ""
 
             # Ajoute la pièce jointe
             if buffer is None:
@@ -250,7 +248,9 @@ class YahooMailDrive:
             raise YMDFileDoesNotExist(file_name)
 
         for file_chunk_mail in files[file_name]:
-            self._ym_api.delete_mail(file_chunk_mail, self._target_folder)
+            self._ym_api.delete_mail(
+                file_chunk_mail, self._target_folder, move_to_trash=True
+            )
 
     def logout(self) -> None:
         """

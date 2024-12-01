@@ -194,16 +194,24 @@ class YahooMailAPI:
             msg.as_bytes(),
         )
 
-    def delete_mail(self, mail: Mail, folder_name: str) -> None:
+    def delete_mail(
+        self, mail: Mail, folder_name: str, *, move_to_trash: bool = False
+    ) -> None:
         """
-        Supprime le mail donné en paramètre, en essayant un
-        nombre de fois défini : supprimer plusieurs mails
-        rapidement peut obliger le serveur a renvoyer une erreur.
+        Supprime le mail donné en paramètre, en le mettant
+        optionnellement dans la corbeille si demandé.
         """
-        logging.debug(f"Deleting mail: '{mail.subject}' with UID: {mail.mail_id}")
+        if move_to_trash:
+            logging.debug(f"Trashing mail: '{mail.subject}' with UID: {mail.mail_id}")
+        else:
+            logging.debug(f"Deleting mail: '{mail.subject}' with UID: {mail.mail_id}")
 
         # Accorde temporairement les droits d’écriture au dossier
         self._select_folder(folder_name, readonly=False)
+
+        if move_to_trash:
+            self._imap_connection.uid("COPY", mail.mail_id, "Trash")
+
         self._imap_connection.uid("STORE", mail.mail_id, "+FLAGS", r"\Deleted")
         # Restreint de nouveau les droits sur le dossier
         self._select_folder(folder_name)
