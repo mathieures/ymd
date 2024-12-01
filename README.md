@@ -15,7 +15,7 @@ Le script peut être utilisé avec Python directement, ou alors être installé 
 
 Puisqu’aucune dépendance n’est requise, on peut lancer la CLI avec :
 ```sh
-py cli.py
+py -m ymd.cli
 ```
 
 ### Installation avec pip

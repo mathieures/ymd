@@ -46,7 +46,7 @@ def _add_global_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--debug", help="enable debug logs", action="store_true")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="YahooMailDrive CLI")
     subparsers = parser.add_subparsers()
 
