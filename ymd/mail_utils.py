@@ -154,11 +154,11 @@ class YahooMailAPI:
 
         # Extrait et renverse les données car le serveur répond à l’envers
         try:
-            data = extract_fetch_result(fetch_result)[::-1]
+            mails_data = extract_fetch_result(fetch_result)[::-1]
         except YMDFetchResultExtractionError as err:
             raise YMDMailsRetrievalError(folder_name, server_reply=data) from err
 
-        for mail_id, subject_data in zip(mail_ids_str, data):
+        for mail_id, subject_data in zip(mail_ids_str, mails_data, strict=True):
             encoded_subject = subject_data.removeprefix(b"Subject: ")
 
             # Si l’objet du mail contient des caractères
@@ -328,7 +328,7 @@ def decode_folder_name(encoded_folder_name: str) -> str:
         if not encoded_chars:
             result.append("&")
         # Sinon on a bien des caractères encodés
-        decoded_chars = f"+{encoded_chars.replace(",","/")}".encode().decode("utf-7")
+        decoded_chars = f"+{encoded_chars.replace(',', '/')}".encode().decode("utf-7")
         # Ajoute les caractères encodés puis les normaux
         result.append(decoded_chars)
         result.append(normal_chars)
