@@ -252,6 +252,13 @@ class YahooMailDrive:
                 file_chunk_mail, self._target_folder, move_to_trash=True
             )
 
+    def noop(self) -> None:
+        """
+        Envoie un NOOP (NO OPeration) au serveur IMAP.
+        N’a aucun effet, mais peut être utilisé pour ne pas subir de timeout.
+        """
+        self._ym_api.noop()
+
     def logout(self) -> None:
         """
         Clôt la connexion au serveur IMAP. Toutes  les commandes

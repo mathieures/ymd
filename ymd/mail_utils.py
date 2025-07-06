@@ -216,6 +216,13 @@ class YahooMailAPI:
         # Restreint de nouveau les droits sur le dossier
         self._select_folder(folder_name)
 
+    def noop(self) -> None:
+        """
+        Envoie un NOOP (NO OPeration) au serveur IMAP.
+        N’a aucun effet, mais peut être utilisé pour ne pas subir de timeout.
+        """
+        self._imap_connection.noop()
+
     def logout(self) -> None:
         """
         Clôt la connexion au serveur IMAP. Toutes  les commandes
