@@ -56,7 +56,7 @@ class YahooMailDrive:
     ) -> None:
         self._ym_api.__exit__(t, v, tb)
 
-    def _get_chunk_count_for_file(
+    def get_chunk_count_for_file(
         self, file_path: Path, buffer: BufferedReader | None = None
     ) -> int:
         """
@@ -201,7 +201,7 @@ class YahooMailDrive:
             raise YMDFileAlreadyExists(file_path.name)
 
         # Pour chaque indice de début de morceau de fichier
-        needed_chunks_count = self._get_chunk_count_for_file(file_path, buffer=buffer)
+        needed_chunks_count = self.get_chunk_count_for_file(file_path, buffer=buffer)
         logging.debug(f"{needed_chunks_count} chunk(s) will be needed")
         for chunk_index in range(needed_chunks_count):
             attachment_name = self._get_subject_for_file_chunk(
