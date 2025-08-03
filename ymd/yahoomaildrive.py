@@ -56,7 +56,14 @@ class YahooMailDrive:
     ) -> None:
         self._ym_api.__exit__(t, v, tb)
 
-    def get_chunk_count_for_file(
+    def get_chunk_count_for_size(self, size: int) -> int:
+        """
+        Retourne le nombre de morceaux nécessaires au téléversement
+        d’un fichier dont la taille est donnée en paramètre.
+        """
+        return (size // self._ym_api.MAX_ATTACHMENT_SIZE) + 1
+
+    def _get_chunk_count_for_file(
         self, file_path: Path, buffer: BufferedReader | None = None
     ) -> int:
         """
@@ -76,7 +83,7 @@ class YahooMailDrive:
             buffer.seek(old_cursor_pos)
         else:
             length = file_path.stat().st_size
-        return (length // self._ym_api.MAX_ATTACHMENT_SIZE) + 1
+        return self.get_chunk_count_for_size(length)
 
     def _get_subject_for_file_chunk(self, file_name: str, chunk_index: int) -> str:
         """
@@ -201,7 +208,7 @@ class YahooMailDrive:
             raise YMDFileAlreadyExists(file_path.name)
 
         # Pour chaque indice de début de morceau de fichier
-        needed_chunks_count = self.get_chunk_count_for_file(file_path, buffer=buffer)
+        needed_chunks_count = self._get_chunk_count_for_file(file_path, buffer=buffer)
         logging.debug(f"{needed_chunks_count} chunk(s) will be needed")
         for chunk_index in range(needed_chunks_count):
             attachment_name = self._get_subject_for_file_chunk(
