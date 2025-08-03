@@ -216,6 +216,30 @@ class YahooMailAPI:
         # Restreint de nouveau les droits sur le dossier
         self._select_folder(folder_name)
 
+    def delete_mails(
+        self, mails: list[Mail], folder_name: str, *, move_to_trash: bool = False
+    ) -> None:
+        """
+        Supprime tous les mails de la liste donnée en paramètre, en
+        les mettant optionnellement dans la corbeille si demandé.
+        """
+        if move_to_trash:
+            logging.debug(f"Trashing mails: {mails}")
+        else:
+            logging.debug(f"Deleting mails: {mails}")
+
+        # Accorde temporairement les droits d’écriture au dossier
+        self._select_folder(folder_name, readonly=False)
+
+        mail_ids_str = ",".join(mail.mail_id for mail in mails)
+
+        if move_to_trash:
+            self._imap_connection.uid("COPY", mail_ids_str, "Trash")
+
+        self._imap_connection.uid("STORE", mail_ids_str, "+FLAGS", r"\Deleted")
+        # Restreint de nouveau les droits sur le dossier
+        self._select_folder(folder_name)
+
     def noop(self) -> None:
         """
         Envoie un NOOP (NO OPeration) au serveur IMAP.

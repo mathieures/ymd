@@ -29,6 +29,13 @@ def callback_remove_command(args: argparse.Namespace, ymd: YahooMailDrive) -> No
     ymd.remove(args.file)
 
 
+def callback_list_folders_command(
+    _args: argparse.Namespace, ymd: YahooMailDrive
+) -> None:
+    """Callback pour la commande "list-folders" de la CLI."""
+    print(*ymd.get_folders(), sep="\n")
+
+
 def _add_global_arguments(parser: argparse.ArgumentParser) -> None:
     """Ajoute les arguments globaux au parser d’argument donné."""
     parser.add_argument(
@@ -74,6 +81,11 @@ def main() -> None:
     remove_command_parser.add_argument("file", help="name of the remote file")
     _add_global_arguments(remove_command_parser)
     remove_command_parser.set_defaults(callback=callback_remove_command)
+
+    # list-folders
+    list_folders_command_parser = subparsers.add_parser("list-folders", aliases=["lsf"])
+    _add_global_arguments(list_folders_command_parser)
+    list_folders_command_parser.set_defaults(callback=callback_list_folders_command)
 
     # Parse les arguments
     args = parser.parse_args()

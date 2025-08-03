@@ -247,10 +247,9 @@ class YahooMailDrive:
         if file_name not in files:
             raise YMDFileDoesNotExist(file_name)
 
-        for file_chunk_mail in files[file_name]:
-            self._ym_api.delete_mail(
-                file_chunk_mail, self._target_folder, move_to_trash=True
-            )
+        self._ym_api.delete_mails(
+            files[file_name], self._target_folder, move_to_trash=True
+        )
 
     def noop(self) -> None:
         """
