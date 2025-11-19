@@ -30,26 +30,40 @@ La CLI s’utilise ensuite comme un exécutable normal :
 ymd
 ```
 
+### Installation avec uv
+
+Il est aussi possible d’installer la CLI avec `uv` après avoir téléchargé le `.tar.gz` :
+```sh
+uv tool install (ls ymd-*.tar.gz)
+```
+
+De même qu’avec `pip`, la CLI pourra se lancer en exécutant `ymd`.
+
 ### Commandes
 
-Peu importe la façon dont est utilisée la CLI, trois commandes sont disponibles avec des aliases :
+Les commandes suivantes sont disponibles avec la CLI :
 - `list` (alias : `ls`) : liste les fichiers téléversés
 - `download <fichier_sur_yahoo> <fichier_local>` (alias : `d`) : télécharge un fichier
 - `upload <fichier_local>` (alias : `u`) : téléverse un fichier
 - `remove <fichier_sur_yahoo>` (alias : `rm`) : supprime un fichier
+- `list-folders` (alias : `lsf`) : liste les dossiers existants
 
-### Arguments
+### Arguments globaux
 
-Certaines choses peuvent être paramétrées grâce à des arguments de la CLI :
-- le fichier où se trouvent les informations de connexion avec `-c/--credentials` (défaut : `credentials.toml`, `~/.config/ymd/credentials.toml`) ;
-- le dossier de destination des mails avec `-f/--folder` (défaut : `ymd`) ;
-- le mode debug avec `--debug`, qui affiche plus d’informations sur ce qui est fait.
+Certains paramètres peuvent être donnés à n’importe quelle commande pour changer le comportement de la CLI :
+- `-h/--help` : affiche l’aide expliquant les arguments disponibles pour la commande utilisée
+- `-c/--credentials` (défaut : `credentials.toml`, `~/.config/ymd/credentials.toml`) : définit où chercher les informations de connexion
+- `-f/--folder` (défaut : `ymd`) : le dossier de destination des mails
+- `--debug` : active le mode débug, affichant plus d’informations sur ce qui est fait par la CLI
 
 ## Tâches manuelles
 
-Bien que la CLI permette d’effectuer la plupart des actions voulues, elle n’offre pas autant de fonctionnalités que le site web officiel ; aussi les actions suivantes sont impossibles avec la CLI :
-- supprimer un dossier ;
-- créer un dossier sans téléverser de fichier.
+Bien que la CLI permette d’effectuer la plupart des actions attendues d’un gestionnaire de stockage en ligne, quelques unes sont plus complexes que les autres voire impossibles. Elles sont résumées dans le tableau ci-dessous.
+
+|        Action        | Comment l’effectuer                                         |
+| :------------------: | ----------------------------------------------------------- |
+|   Créer un dossier   | Utiliser une commande en ciblant le dossier voulu avec `-f` |
+| Supprimer un dossier | Impossible                                                  |
 
 ## Motivation
 

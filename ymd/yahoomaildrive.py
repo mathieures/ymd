@@ -16,6 +16,8 @@ from ymd.exceptions import (
     YMDMailsRetrievalError,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class YahooMailDrive:
     """
@@ -98,7 +100,7 @@ class YahooMailDrive:
         Retourne le nom du fichier extrait de l’objet de mail
         donné, ou None si un nom n’a pas pu être extrait.
         """
-        logging.debug(f"Parsing subject: {subject}")
+        logger.debug(f"Parsing subject: {subject}")
         partitioned_subject = subject.partition(".part")
 
         # Si l’objet du mail n’est pas comme prévu, ne retourne rien
@@ -128,7 +130,7 @@ class YahooMailDrive:
             file_name = self._get_file_name_from_subject(mail.subject)
             # Si le nom n’a pas pu être extrait, on passe ce fichier
             if file_name is None:
-                logging.warning(
+                logger.warning(
                     f"Could not determine file name of chunk: {mail.subject}"
                 )
                 continue
@@ -154,17 +156,23 @@ class YahooMailDrive:
 
         def _download_file_into(file_name: str, dst_buffer: BufferedWriter) -> None:
             """Télécharge le fichier dont le nom est donné vers le buffer donné."""
-            for file_chunk_mail in files[file_name]:
-                logging.debug(f"Downloading chunk: {file_chunk_mail.subject}")
+            progress_text = "Downloaded chunk(s):"
+            total_chunks = len(files[file_name])
+            for chunk_index, file_chunk_mail in enumerate(files[file_name]):
+                logger.debug(f"Downloading chunk: {file_chunk_mail.subject}")
+                print_progress(progress_text, chunk_index, total_chunks)
+
                 # Télécharge la pièce jointe et écrit son contenu à la fin du fichier
                 written_bytes_count = dst_buffer.write(
                     self._ym_api.get_attachment_content_of_mail(file_chunk_mail)
                 )
-                logging.debug(f"Wrote {written_bytes_count} bytes")
+                logger.debug(f"Wrote {written_bytes_count} bytes")
+
+            print_progress(progress_text, total_chunks, total_chunks)
 
         # Récupère le nom des fichiers téléversés et
         # les infos sur les mails de leurs morceaux
-        logging.debug(f"Checking the existence of {file_name} on the server")
+        logger.debug(f"Checking the existence of {file_name} on the server")
         files = self.get_files_data()
 
         # Si le fichier dont le nom est donné en paramètre n’est pas trouvé, on s’arrête
@@ -225,7 +233,7 @@ class YahooMailDrive:
 
         # Vérifie si un morceau de fichier existe déjà sur le serveur
         # possédant le même nom que le morceau qui va être téléversé
-        logging.debug(f"Checking the existence of {file_path.name} on the server")
+        logger.debug(f"Checking the existence of {file_path.name} on the server")
         files_data = self.get_files_data()
         first_subject = self._get_subject_for_file_chunk(file_path.name, start_chunk)
         already_present_subjects = [
@@ -238,10 +246,9 @@ class YahooMailDrive:
 
         # Pour chaque indice de début de morceau de fichier
         needed_chunks_count = self._get_chunk_count_for_file(file_path, buffer=buffer)
-        logging.debug(f"{needed_chunks_count} chunk(s) will be needed")
+        logger.debug(f"{needed_chunks_count} chunk(s) will be needed")
 
-        progress_text = "Uploaded chunk:"
-        print_progress(progress_text, start_chunk, needed_chunks_count)
+        progress_text = "Uploaded chunk(s):"
 
         for chunk_index in range(start_chunk, needed_chunks_count):
             attachment_name = self._get_subject_for_file_chunk(
@@ -268,10 +275,11 @@ class YahooMailDrive:
             msg.attach(attachment)
 
             # Ajoute le mail au dossier
-            logging.debug(f"Uploading email {attachment_name}")
+            logger.debug(f"Uploading email {attachment_name}")
+            print_progress(progress_text, start_chunk, needed_chunks_count)
             self._ym_api.save_mail(msg, self._target_folder)
 
-            print_progress(progress_text, chunk_index + 1, needed_chunks_count)
+        print_progress(progress_text, needed_chunks_count, needed_chunks_count)
 
     def remove(self, file_name: str) -> None:
         """
@@ -282,7 +290,7 @@ class YahooMailDrive:
         """
         # Récupère le nom des fichiers téléversés et
         # les infos sur les mails de leurs morceaux
-        logging.debug(f"Checking the existence of {file_name} on the server")
+        logger.debug(f"Checking the existence of {file_name} on the server")
         files = self.get_files_data()
 
         # Si le fichier dont le nom est donné en paramètre n’est pas trouvé, on s’arrête

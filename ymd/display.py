@@ -6,11 +6,13 @@ if TYPE_CHECKING:
     from ymd.mail_utils import Mail
 
 
-def print_files_list(files_data: dict[str, list["Mail"]], *, long: bool) -> None:
+def print_files_list(
+    files_data: dict[str, list["Mail"]], *, long: bool, column_separator: str = " "
+) -> None:
     """Affiche la liste de fichiers donnée avec un en-tête."""
-    column_separator = " "
 
-    lines = []
+    # Liste des lignes qui seront affichées
+    lines: list[tuple[str, ...]] = []
 
     # Initialise la liste de lignes avec l’en-tête si activé
     if long:
@@ -32,14 +34,14 @@ def print_files_list(files_data: dict[str, list["Mail"]], *, long: bool) -> None
             line = (file_name,)
         lines.append(line)
 
-    # Construit la chaîne résultante en commençant par l’en-tête aligné
+    # Construit la chaîne résultante en commençant par l’en-tête
+    # aligné en fonction des longueurs maximales pour chaque colonne
     if long:
-        header_str = (
-            column_separator.join(
-                f"{header[i]:<{header_lengths[i]}}" for i in range(len(header))
-            )
-            + "\n"
+        header_str_parts = (
+            f"{field:<{length}}"
+            for field, length in zip(header, header_lengths, strict=True)
         )
+        header_str = f"{column_separator.join(header_str_parts)}\n"
     else:
         header_str = ""
     print(header_str + "\n".join(column_separator.join(line) for line in lines))

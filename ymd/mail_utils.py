@@ -17,6 +17,8 @@ from ymd.exceptions import (
     YMDMailsRetrievalError,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class Mail:
     """Classe représentant très simplement un mail grâce à son ID et son objet."""
@@ -24,13 +26,6 @@ class Mail:
     mail_id: str  # C’est un entier, mais les fonctions demandent des chaînes
     subject: str
     date: datetime
-
-    # @classmethod
-    # def from_dict(cls, mail_dict: dict[str, str]) -> typing.Self:
-    #     """
-    #     Transforme un dictionnaire contenant les données d’un mail en un objet Mail.
-    #     """
-    #     return cls(mail_id=mail_dict["mail_id"], subject=mail_dict["subject"])
 
     @classmethod
     def from_fetch_result_data(
@@ -76,12 +71,6 @@ class Mail:
     def __repr__(self) -> str:
         return f"<Mail({self.mail_id}, {self.subject})>"
 
-    # def to_dict(self) -> dict[str, str]:
-    #     """
-    #     Retourne un dictionnaire contenant les données du mail, sérialisable en JSON.
-    #     """
-    #     return {"mail_id": self.mail_id, "subject": self.subject}
-
 
 class FetchResult:
     """Classe représentant le résultat « parsé » d’une commande FETCH."""
@@ -98,7 +87,7 @@ class FetchResult:
         contrairement à la documentation est un tuple contenant le
         statut en bytes (et non str) et une liste contenant des données.
         Peut lever l’exception suivante :
-        - YMDFetchResultExtractionError si le résultat n’a pas pu être extrait de la réponse
+        - YMDFetchResultExtractionError si le résultat n’a pas pu être extrait
         """
         _status, raw_data = raw_fetch_result
         if raw_data[0] is None:
@@ -134,10 +123,10 @@ class YahooMailAPI:
     _imap_connection: imaplib.IMAP4_SSL  # Connexion au serveur IMAP
 
     def __init__(self, address: str, password: str) -> None:
-        logging.debug(f"Connecting to IMAP server: {self.IMAP_SERVER_URL}")
+        logger.debug(f"Connecting to IMAP server: {self.IMAP_SERVER_URL}")
         self._imap_connection = imaplib.IMAP4_SSL(host=self.IMAP_SERVER_URL)
 
-        logging.debug(f"Authenticating with address: {address}")
+        logger.debug(f"Authenticating with address: {address}")
         self._imap_connection.login(address, password)
 
     def __enter__(self) -> typing.Self:
@@ -149,7 +138,7 @@ class YahooMailAPI:
         v: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        logging.debug(f"Closing connection with IMAP server: {self.IMAP_SERVER_URL}")
+        logger.debug(f"Closing connection with IMAP server: {self.IMAP_SERVER_URL}")
         self._imap_connection.__exit__(t, v, tb)
 
     def _select_folder(self, folder_name: str, *, readonly: bool = True) -> None:
@@ -158,7 +147,7 @@ class YahooMailAPI:
         avec les droits en lecture seule ou non.
         """
         permission = "read-only" if readonly else "write"
-        logging.debug(f"Selecting folder {folder_name} with {permission} permission")
+        logger.debug(f"Selecting folder {folder_name} with {permission} permission")
         self._imap_connection.select(encode_folder_name(folder_name), readonly=readonly)
 
     def get_all_folders(self) -> list[str]:
@@ -168,7 +157,7 @@ class YahooMailAPI:
         # place et décode les caractères encodés en une variante de l’UTF-7
         folders = [decode_folder_name(folder.replace(r"\"", '"')) for folder in folders]
 
-        logging.debug(f"Retrieved folders: {folders}")
+        logger.debug(f"Retrieved folders: {folders}")
         return folders
 
     def create_folder(self, folder_name: str) -> None:
@@ -176,12 +165,12 @@ class YahooMailAPI:
         Crée le dossier donné s’il n’existe pas, en créant tous
         les dossiers parents si le nom donné contient des slashes.
         """
-        logging.debug(f"Checking the existence of the folder: {folder_name}")
+        logger.debug(f"Checking the existence of the folder: {folder_name}")
         folders = self.get_all_folders()
 
         # Si le dossier existe, on s’arrête
         if folder_name in folders:
-            logging.debug(f"Folder {folder_name} already exists")
+            logger.debug(f"Folder {folder_name} already exists")
             return
 
         # Si le nom contient des slashes, il est composé de sous-dossiers, donc
@@ -194,7 +183,7 @@ class YahooMailAPI:
             subfolder = path_separator.join(subfolders[: subfolder_index + 1])
             if subfolder in folders:
                 continue
-            logging.debug(f"Creating folder: {subfolder}")
+            logger.debug(f"Creating folder: {subfolder}")
             self._imap_connection.create(encode_folder_name(subfolder))
 
     def get_all_mails(self, folder_name: str) -> list[Mail]:
@@ -203,10 +192,10 @@ class YahooMailAPI:
         Peut lever l’exception suivante :
         - YMDMailsRetrievalError si la réponse du serveur IMAP est invalide
         """
-        logging.debug(f"Retrieving all mails in folder: {folder_name}")
+        logger.debug(f"Retrieving all mails in folder: {folder_name}")
         self._select_folder(folder_name)
 
-        logging.debug(f"Searching for UIDs")
+        logger.debug("Searching for UIDs")
         # Récupère la liste des ID des mails présents dans le dossier
         _status, data = self._imap_connection.uid("SEARCH", "ALL")
         mail_ids: bytes | None = data[0]
@@ -214,7 +203,7 @@ class YahooMailAPI:
             raise YMDMailsRetrievalError(folder_name, server_reply=data)
 
         mail_ids_str = mail_ids.decode().split()
-        logging.debug(f"Retrieved mail IDs: {mail_ids_str}")
+        logger.debug(f"Retrieved mail IDs: {mail_ids_str}")
 
         result = []
 
@@ -274,9 +263,9 @@ class YahooMailAPI:
         optionnellement dans la corbeille si demandé.
         """
         if move_to_trash:
-            logging.debug(f"Trashing mail: '{mail.subject}' with UID: {mail.mail_id}")
+            logger.debug(f"Trashing mail: '{mail.subject}' with UID: {mail.mail_id}")
         else:
-            logging.debug(f"Deleting mail: '{mail.subject}' with UID: {mail.mail_id}")
+            logger.debug(f"Deleting mail: '{mail.subject}' with UID: {mail.mail_id}")
 
         # Accorde temporairement les droits d’écriture au dossier
         self._select_folder(folder_name, readonly=False)
@@ -296,9 +285,9 @@ class YahooMailAPI:
         les mettant optionnellement dans la corbeille si demandé.
         """
         if move_to_trash:
-            logging.debug(f"Trashing mails: {mails}")
+            logger.debug(f"Trashing mails: {mails}")
         else:
-            logging.debug(f"Deleting mails: {mails}")
+            logger.debug(f"Deleting mails: {mails}")
 
         # Accorde temporairement les droits d’écriture au dossier
         self._select_folder(folder_name, readonly=False)
@@ -335,7 +324,7 @@ def extract_list_result(list_result: tuple) -> list[str]:
     - YMDListResultExtractionError si le résultat n’a pas pu être extrait de la réponse
     """
     _status, data = list_result
-    data = typing.cast(list[bytes], data)
+    data = typing.cast("list[bytes]", data)
     result = []
     for folder_data_bytes in data:
         # Les dossiers suivent la syntaxe suivante : (<flags>) "/" "<chemin_relatif>"
