@@ -3,15 +3,22 @@ import logging
 from pathlib import Path
 
 from ymd import file_utils
+from ymd.display import print_files_list
 from ymd.yahoomaildrive import YahooMailDrive
 
 YMD_FOLDER_NAME = "ymd"
 YMD_DEFAULT_LOG_LEVEL = logging.ERROR
 
+DEFAULT_CREDENTIALS_FILE_NAME = "credentials.toml"
+DEFAULT_CREDENTIALS_LOCATIONS = [
+    Path(DEFAULT_CREDENTIALS_FILE_NAME),
+    Path("~/.config/ymd", DEFAULT_CREDENTIALS_FILE_NAME),
+]
 
-def callback_list_command(_args: argparse.Namespace, ymd: YahooMailDrive) -> None:
+
+def callback_list_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "list" de la CLI."""
-    print(*ymd.get_files_data().keys(), sep="\n")
+    print_files_list(ymd.get_files_data(), long=args.long)
 
 
 def callback_download_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
@@ -21,7 +28,7 @@ def callback_download_command(args: argparse.Namespace, ymd: YahooMailDrive) -> 
 
 def callback_upload_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "upload" de la CLI."""
-    ymd.upload(Path(args.file))
+    ymd.upload(Path(args.file), start_chunk=args.start_chunk)
 
 
 def callback_remove_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
@@ -42,7 +49,7 @@ def _add_global_arguments(parser: argparse.ArgumentParser) -> None:
         "-c",
         "--credentials",
         help="path of the credentials file to use",
-        default="credentials.toml",
+        default=DEFAULT_CREDENTIALS_FILE_NAME,
     )
     parser.add_argument(
         "-f",
@@ -60,6 +67,12 @@ def main() -> None:
     # Définit les commandes et leurs arguments
     # list
     list_command_parser = subparsers.add_parser("list", aliases=["ls"])
+    list_command_parser.add_argument(
+        "-l",
+        "--long",
+        action="store_true",
+        help="output more information about the files",
+    )
     _add_global_arguments(list_command_parser)
     list_command_parser.set_defaults(callback=callback_list_command)
 
@@ -73,6 +86,12 @@ def main() -> None:
     # upload
     upload_command_parser = subparsers.add_parser("upload", aliases=["u"])
     upload_command_parser.add_argument("file", help="path of the file to upload")
+    upload_command_parser.add_argument(
+        "--start-chunk",
+        type=int,
+        default=0,
+        help="start upload from the given chunk number",
+    )
     _add_global_arguments(upload_command_parser)
     upload_command_parser.set_defaults(callback=callback_upload_command)
 
@@ -101,7 +120,9 @@ def main() -> None:
     log_level = logging.DEBUG if args.debug else YMD_DEFAULT_LOG_LEVEL
     logging.basicConfig(format="%(levelname)s: %(message)s", level=log_level)
     # Charge les informations de connexion
-    address, password = file_utils.load_credentials(Path(args.credentials))
+    address, password = file_utils.load_credentials(
+        Path(args.credentials), DEFAULT_CREDENTIALS_LOCATIONS
+    )
 
     # Effectue les actions déterminées par les arguments
     with YahooMailDrive(address, password, target_folder=args.folder) as ymd:

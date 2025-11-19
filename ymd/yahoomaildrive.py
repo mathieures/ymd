@@ -1,8 +1,6 @@
 import email
-import email.header
 import email.mime.application
 import email.mime.multipart
-import email.mime.text
 import logging
 import typing
 from io import BufferedReader, BufferedWriter
@@ -10,8 +8,9 @@ from pathlib import Path
 from types import TracebackType
 
 from ymd import file_utils, mail_utils
+from ymd.display import print_progress
 from ymd.exceptions import (
-    YMDFileAlreadyExists,
+    YMDChunkAlreadyExists,
     YMDFileDoesNotExist,
     YMDFilesRetrievalError,
     YMDMailsRetrievalError,
@@ -90,7 +89,23 @@ class YahooMailDrive:
         Retourne l’objet qu’un mail doit avoir pour le fichier
         au chemin donné et pour l’indice du morceau donné.
         """
+        # On commence à compter les morceaux à 1, mais cela pourrait changer
+        # return f"{file_name}.part{chunk_index}"
         return f"{file_name}.part{chunk_index + 1}"
+
+    def _get_file_name_from_subject(self, subject: str) -> str | None:
+        """
+        Retourne le nom du fichier extrait de l’objet de mail
+        donné, ou None si un nom n’a pas pu être extrait.
+        """
+        logging.debug(f"Parsing subject: {subject}")
+        partitioned_subject = subject.partition(".part")
+
+        # Si l’objet du mail n’est pas comme prévu, ne retourne rien
+        if partitioned_subject[1] != ".part":
+            return None
+
+        return partitioned_subject[0]
 
     def get_folders(self) -> list[str]:
         """Retourne la liste de tous les dossiers disponibles."""
@@ -110,16 +125,15 @@ class YahooMailDrive:
         result = {}
         # Pour chaque mail, extrait le nom de fichier situé dans son objet
         for mail in mails:
-            logging.debug(f"Parsing subject: {mail.subject}")
-            partitioned_subject = mail.subject.partition(".part")
-
-            # Si l’objet du mail n’est pas comme prévu, on le passe
-            if partitioned_subject[1] != ".part":
+            file_name = self._get_file_name_from_subject(mail.subject)
+            # Si le nom n’a pas pu être extrait, on passe ce fichier
+            if file_name is None:
                 logging.warning(
                     f"Could not determine file name of chunk: {mail.subject}"
                 )
                 continue
-            file_name = partitioned_subject[0]
+
+            # Sinon, ajoute le mail à la liste associée au nom du fichier
             if file_name not in result:
                 result[file_name] = [mail]
             else:
@@ -175,15 +189,22 @@ class YahooMailDrive:
         if dst_path_or_buffer is not None:
             _download_file_into(file_name, dst_path_or_buffer)
 
-    def upload(self, file_path: Path, buffer: BufferedReader | None = None) -> None:
+    def upload(
+        self,
+        file_path: Path,
+        buffer: BufferedReader | None = None,
+        start_chunk: int = 0,
+    ) -> None:
         """
         Téléverse le fichier dont le chemin est donné en paramètre ou le
         contenu du buffer donné en le découpant en plusieurs morceaux s’il
         est plus gros que la taille maximale autorisée pour les pièces jointes.
         Le chemin donné est également utilisé pour déterminer
         le nom du fichier sur le serveur une fois téléversé.
+        Si un numéro de morceau est donné, commence le
+        téléversement à partir de celui-ci au lieu du début.
         Peut lever l’exception suivante :
-        - YMDFileAlreadyExists si le fichier existe déjà sur le serveur
+        - YMDChunkAlreadyExists si le fichier existe déjà sur le serveur
         """
 
         def _create_attachment_with_buffer(
@@ -202,15 +223,27 @@ class YahooMailDrive:
                 _subtype=file_path.name.split(".")[-1],
             )
 
-        # Si un fichier possédant ce nom a déjà été téléversé, on s’arrête
+        # Vérifie si un morceau de fichier existe déjà sur le serveur
+        # possédant le même nom que le morceau qui va être téléversé
         logging.debug(f"Checking the existence of {file_path.name} on the server")
-        if file_path.name in self.get_files_data():
-            raise YMDFileAlreadyExists(file_path.name)
+        files_data = self.get_files_data()
+        first_subject = self._get_subject_for_file_chunk(file_path.name, start_chunk)
+        already_present_subjects = [
+            mail.subject for mail in files_data.get(file_path.name, [])
+        ]
+
+        # S’il existe déjà, on s’arrête
+        if first_subject in already_present_subjects:
+            raise YMDChunkAlreadyExists(first_subject)
 
         # Pour chaque indice de début de morceau de fichier
         needed_chunks_count = self._get_chunk_count_for_file(file_path, buffer=buffer)
         logging.debug(f"{needed_chunks_count} chunk(s) will be needed")
-        for chunk_index in range(needed_chunks_count):
+
+        progress_text = "Uploaded chunk:"
+        print_progress(progress_text, start_chunk, needed_chunks_count)
+
+        for chunk_index in range(start_chunk, needed_chunks_count):
             attachment_name = self._get_subject_for_file_chunk(
                 file_path.name, chunk_index
             )
@@ -237,6 +270,8 @@ class YahooMailDrive:
             # Ajoute le mail au dossier
             logging.debug(f"Uploading email {attachment_name}")
             self._ym_api.save_mail(msg, self._target_folder)
+
+            print_progress(progress_text, chunk_index + 1, needed_chunks_count)
 
     def remove(self, file_name: str) -> None:
         """

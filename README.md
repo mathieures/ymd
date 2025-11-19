@@ -41,7 +41,7 @@ Peu importe la façon dont est utilisée la CLI, trois commandes sont disponible
 ### Arguments
 
 Certaines choses peuvent être paramétrées grâce à des arguments de la CLI :
-- le fichier où se trouvent les informations de connexion avec `-c/--credentials` (défaut : `credentials.toml`) ;
+- le fichier où se trouvent les informations de connexion avec `-c/--credentials` (défaut : `credentials.toml`, `~/.config/ymd/credentials.toml`) ;
 - le dossier de destination des mails avec `-f/--folder` (défaut : `ymd`) ;
 - le mode debug avec `--debug`, qui affiche plus d’informations sur ce qui est fait.
 

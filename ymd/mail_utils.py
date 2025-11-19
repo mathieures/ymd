@@ -3,13 +3,12 @@
 import base64 as b64
 import email
 import email.header
-import email.mime.application
 import email.mime.multipart
-import email.mime.text
 import imaplib
 import logging
 import time
 import typing
+from datetime import datetime
 from types import TracebackType
 
 from ymd.exceptions import (
@@ -24,26 +23,102 @@ class Mail:
 
     mail_id: str  # C’est un entier, mais les fonctions demandent des chaînes
     subject: str
+    date: datetime
+
+    # @classmethod
+    # def from_dict(cls, mail_dict: dict[str, str]) -> typing.Self:
+    #     """
+    #     Transforme un dictionnaire contenant les données d’un mail en un objet Mail.
+    #     """
+    #     return cls(mail_id=mail_dict["mail_id"], subject=mail_dict["subject"])
 
     @classmethod
-    def from_dict(cls, mail_dict: dict[str, str]) -> typing.Self:
-        """
-        Transforme un dictionnaire contenant les données d’un mail en un objet Mail.
-        """
-        return cls(mail_id=mail_dict["mail_id"], subject=mail_dict["subject"])
+    def from_fetch_result_data(
+        cls, mail_id: str, fetch_result_data: bytes
+    ) -> typing.Self:
+        """Convertit les données brutes récupérées dans un FetchResult en un Mail."""
 
-    def __init__(self, mail_id: str, subject: str) -> None:
+        def extract_subject(raw_subject: bytes) -> str:
+            encoded_subject = raw_subject.removeprefix(b"Subject: ")
+            # Si l’objet du mail contient des caractères
+            # UTF-8, il commence par une chaîne précise
+            if encoded_subject.startswith(b"=?UTF-8?Q?"):
+                decoded_header = email.header.decode_header(encoded_subject.decode())
+                return decoded_header[0][0].decode()
+
+            return encoded_subject.removesuffix(b"\r\n\r\n").decode()
+
+        def extract_date(raw_date: bytes) -> datetime:
+            return datetime.strptime(
+                raw_date.removeprefix(b"Date: ").decode(),
+                "%a, %d %b %Y %H:%M:%S %z (%Z)",
+            )
+
+        split_data = fetch_result_data.splitlines()
+
+        # Initialise le mail avec l’ID donné et des données par défaut
+        result = cls(mail_id, "", datetime.now())
+
+        # Vérifie les en-têtes pour en extraire les informations voulues
+        for header_data in split_data:
+            if header_data.startswith(b"Subject: "):
+                result.subject = extract_subject(header_data)
+            elif header_data.startswith(b"Date: "):
+                result.date = extract_date(header_data)
+
+        return result
+
+    def __init__(self, mail_id: str, subject: str, date: datetime) -> None:
         self.mail_id = mail_id
         self.subject = subject
+        self.date = date
 
     def __repr__(self) -> str:
         return f"<Mail({self.mail_id}, {self.subject})>"
 
-    def to_dict(self) -> dict[str, str]:
+    # def to_dict(self) -> dict[str, str]:
+    #     """
+    #     Retourne un dictionnaire contenant les données du mail, sérialisable en JSON.
+    #     """
+    #     return {"mail_id": self.mail_id, "subject": self.subject}
+
+
+class FetchResult:
+    """Classe représentant le résultat « parsé » d’une commande FETCH."""
+
+    uids: list[str]
+    data: list[bytes]
+
+    @classmethod
+    def from_raw(
+        cls, raw_fetch_result: tuple[bytes, list[tuple[bytes, bytes]]]
+    ) -> typing.Self:
         """
-        Retourne un dictionnaire contenant les données du mail, sérialisable en JSON.
+        Retourne le résultat extrait d’une requête fetch, qui
+        contrairement à la documentation est un tuple contenant le
+        statut en bytes (et non str) et une liste contenant des données.
+        Peut lever l’exception suivante :
+        - YMDFetchResultExtractionError si le résultat n’a pas pu être extrait de la réponse
         """
-        return {"mail_id": self.mail_id, "subject": self.subject}
+        _status, raw_data = raw_fetch_result
+        if raw_data[0] is None:
+            raise YMDFetchResultExtractionError(raw_fetch_result)
+
+        # S’il n’y a pas un nombre pair d’objets, il y a un problème
+        if len(raw_data) % 2 != 0:
+            raise YMDFetchResultExtractionError(raw_fetch_result)
+
+        uids = []
+        data = []
+        for metadata, mail_data in raw_data[::2]:
+            uids.append(metadata.split()[2].decode())
+            data.append(mail_data)
+
+        return cls(uids[::-1], data[::-1])
+
+    def __init__(self, uids: list[str], data: list[bytes]) -> None:
+        self.uids = uids
+        self.data = data
 
 
 class YahooMailAPI:
@@ -131,6 +206,7 @@ class YahooMailAPI:
         logging.debug(f"Retrieving all mails in folder: {folder_name}")
         self._select_folder(folder_name)
 
+        logging.debug(f"Searching for UIDs")
         # Récupère la liste des ID des mails présents dans le dossier
         _status, data = self._imap_connection.uid("SEARCH", "ALL")
         mail_ids: bytes | None = data[0]
@@ -149,27 +225,22 @@ class YahooMailAPI:
         # On peut demander des informations sur tous les mails
         # en même temps si on sépare les UID par des virgules
         fetch_result = self._imap_connection.uid(
-            "FETCH", ",".join(mail_ids_str), "(BODY[HEADER.FIELDS (SUBJECT)])"
+            "FETCH", ",".join(mail_ids_str), "(BODY[HEADER.FIELDS (SUBJECT DATE FROM)])"
         )
 
         # Extrait et renverse les données car le serveur répond à l’envers
         try:
-            mails_data = extract_fetch_result(fetch_result)[::-1]
+            parsed_fetch_result = FetchResult.from_raw(fetch_result)  # pyright: ignore[reportArgumentType]
         except YMDFetchResultExtractionError as err:
             raise YMDMailsRetrievalError(folder_name, server_reply=data) from err
 
-        for mail_id, subject_data in zip(mail_ids_str, mails_data, strict=True):
-            encoded_subject = subject_data.removeprefix(b"Subject: ")
+        # Extrait l’objet de chaque mail
+        for mail_id, raw_mail_data in zip(
+            parsed_fetch_result.uids, parsed_fetch_result.data, strict=True
+        ):
+            parsed_mail = Mail.from_fetch_result_data(mail_id, raw_mail_data)
 
-            # Si l’objet du mail contient des caractères
-            # UTF-8, il commence par une chaîne précise
-            if encoded_subject.startswith(b"=?UTF-8?Q?"):
-                decoded_header = email.header.decode_header(encoded_subject.decode())
-                subject = decoded_header[0][0].decode()
-            else:
-                subject = encoded_subject.removesuffix(b"\r\n\r\n").decode()
-
-            result.append(Mail(mail_id, subject))
+            result.append(parsed_mail)
 
         return result
 
@@ -178,7 +249,8 @@ class YahooMailAPI:
         fetch_result = self._imap_connection.uid(
             "FETCH", mail.mail_id, "(BODY.PEEK[1])"
         )
-        return b64.b64decode(extract_fetch_result(fetch_result)[0])
+        parsed_fetch_result = FetchResult.from_raw(fetch_result)  # pyright: ignore[reportArgumentType]
+        return b64.b64decode(parsed_fetch_result.data[0])
 
     def save_mail(
         self, msg: email.mime.multipart.MIMEMultipart, folder_name: str
@@ -253,23 +325,6 @@ class YahooMailAPI:
         suivantes lèveront une erreur imaplib.IMAP4.error.
         """
         self._imap_connection.logout()
-
-
-def extract_fetch_result(fetch_result: tuple) -> list[bytes]:
-    """
-    Retourne le résultat extrait d’une requête fetch, qui
-    contrairement à la documentation est un tuple contenant le
-    statut en bytes (et non str) et une liste contenant des données.
-    Peut lever l’exception suivante :
-    - YMDFetchResultExtractionError si le résultat n’a pas pu être extrait de la réponse
-    """
-    _status, data = fetch_result
-    # Les données sont un ou des tuples suivi(s) d’un objet bytes constant : b")".
-    # Les tuples contiennent deux objets bytes : les métadonnées et les données,
-    # donc on extrait à chaque fois le second élément de chaque tuple.
-    if data[0] is None:
-        raise YMDFetchResultExtractionError(fetch_result)
-    return [t[1] for t in data[::2]]
 
 
 def extract_list_result(list_result: tuple) -> list[str]:

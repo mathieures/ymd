@@ -5,9 +5,9 @@ class YMDException(BaseException):
     """Classe de base pour toutes les exceptions de YMD."""
 
 
-class YMDFileAlreadyExists(YMDException):
-    def __init__(self, file_name: str) -> None:
-        super().__init__(f"A file named '{file_name}' already exists on the server.")
+class YMDChunkAlreadyExists(YMDException):
+    def __init__(self, chunk_name: str) -> None:
+        super().__init__(f"A chunk named '{chunk_name}' already exists on the server.")
 
 
 class YMDFileDoesNotExist(YMDException):
