@@ -31,11 +31,11 @@ build:
 upload_package:
   stage: upload
   image: curlimages/curl:latest
-  script: |-
-    curl                                        \
-      --fail-with-body                          \
-      --header "JOB-TOKEN: $CI_JOB_TOKEN"       \
-      --upload-file "dist/${PACKAGE_FILE_NAME}" \
+  script: >-
+    curl
+      --fail-with-body
+      --header "JOB-TOKEN: $CI_JOB_TOKEN"
+      --upload-file "dist/${PACKAGE_FILE_NAME}"
       "${PACKAGE_REGISTRY_URL}/${PACKAGE_FILE_NAME}"
 
 # Crée une release GitLab contenant le paquet
@@ -43,8 +43,8 @@ release_job:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   # Documentation : https://docs.gitlab.com/ee/user/project/releases/release_fields.html#use-a-generic-package-for-attaching-binaries
-  script: |-
-    release-cli create              \
-      --name "v${CI_COMMIT_TAG}"    \
-      --tag-name "${CI_COMMIT_TAG}" \
+  script: >-
+    release-cli create
+      --name "v${CI_COMMIT_TAG}"
+      --tag-name "${CI_COMMIT_TAG}"
       --assets-link "{\"name\":\"${PACKAGE_FILE_NAME}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_FILE_NAME}\"}"
