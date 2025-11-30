@@ -1,6 +1,6 @@
 # YMD (Yahoo Mail Drive)
 
-Cet outil en ligne de commandes en Python pur permet de lister, télécharger et téléverser des fichiers sur YahooMail en créant des mails contenant des pièces jointes dans un dossier dédié. La limite de taille pour une pièce jointe étant d’environ 29Mo, les fichiers sont divisés en plusieurs morceaux de façon transparente lors du téléversement, puis rassemblés lors du téléchargement.
+Outil en ligne de commandes permettant de stocker des fichiers sur YahooMail.
 
 ## Prérequis
 
@@ -20,12 +20,12 @@ py -m ymd.cli
 
 ### Installation avec pip
 
-Pour avoir accès à la CLI comme exécutable, il est possible de télécharger le paquet Python dans les [Releases GitLab](https://gitlab.com/mathieures/ymd/-/releases). Une fois le fichier `.tar.gz` téléchargé, il est installable dans un environnement virtuel ou globalement avec :
+Pour avoir accès à la CLI comme exécutable, télécharger le fichier `.tar.gz` le plus récent dans les [Releases GitLab](https://gitlab.com/mathieures/ymd/-/releases) ou les [Releases GitHub](https://github.com/mathieures/ymd/releases), puis l’installer avec :
 ```sh
-pip install (ls ymd-*.tar.gz)
+pip install ymd-*.tar.gz
 ```
 
-La CLI s’utilise ensuite comme un exécutable normal :
+La CLI pourra se lancer avec :
 ```sh
 ymd
 ```
@@ -34,7 +34,7 @@ ymd
 
 Il est aussi possible d’installer la CLI avec `uv` après avoir téléchargé le `.tar.gz` :
 ```sh
-uv tool install (ls ymd-*.tar.gz)
+uv tool install ymd-*.tar.gz
 ```
 
 De même qu’avec `pip`, la CLI pourra se lancer en exécutant `ymd`.
@@ -42,29 +42,66 @@ De même qu’avec `pip`, la CLI pourra se lancer en exécutant `ymd`.
 ### Commandes
 
 Les commandes suivantes sont disponibles avec la CLI :
-- `list` (alias : `ls`) : liste les fichiers téléversés
-- `download <fichier_sur_yahoo> <fichier_local>` (alias : `d`) : télécharge un fichier
-- `upload <fichier_local>` (alias : `u`) : téléverse un fichier
-- `remove <fichier_sur_yahoo>` (alias : `rm`) : supprime un fichier
-- `list-folders` (alias : `lsf`) : liste les dossiers existants
+
+| Commande                                     | Alias | Description                   |
+| -------------------------------------------- | ----- | ----------------------------- |
+| `list`                                       | `ls`  | Liste les fichiers téléversés |
+| `download <fichier_sur_yahoo> <destination>` | `d`   | Télécharge un fichier         |
+| `upload <fichier_local>`                     | `u`   | Téléverse un fichier          |
+| `remove <fichier_sur_yahoo>`                 | `rm`  | Supprime un fichier           |
+| `list-folders`                               | `lsf` | Liste les dossiers existants  |
+
 
 ### Arguments globaux
 
-Certains paramètres peuvent être donnés à n’importe quelle commande pour changer le comportement de la CLI :
+Les arguments suivants peuvent être donnés à n’importe quelle commande pour changer le comportement de la CLI :
 - `-h/--help` : affiche l’aide expliquant les arguments disponibles pour la commande utilisée
 - `-c/--credentials` (défaut : `credentials.toml`, `~/.config/ymd/credentials.toml`) : définit où chercher les informations de connexion
 - `-f/--folder` (défaut : `ymd`) : le dossier de destination des mails
 - `--debug` : active le mode débug, affichant plus d’informations sur ce qui est fait par la CLI
 
+## Exemples
+
+Les exemples listés ci-dessous requièrent un fichier `credentials.toml` valide pour être exécutés.
+
+### Téléverser un fichier dans le dossier par défaut
+
+```sh
+ymd upload ./exemple.txt
+```
+
+### Téléverser un fichier dans un sous-dossier (en le créant s’il n’existe pas)
+
+```sh
+ymd upload ./exemple.txt --folder dossier/sous-dossier
+```
+
+### Lister les fichiers dans un sous-dossier (en le créant s’il n’existe pas)
+
+```sh
+ymd list --folder dossier/sous-dossier
+```
+
+### Télécharger un fichier dans le dossier par défaut
+
+```sh
+ymd download exemple.txt ./exemple-téléchargé.txt
+```
+
+### Télécharger un fichier dans un sous-dossier
+
+```sh
+ymd download exemple.txt téléchargé.txt --folder dossier/sous-dossier
+```
+
 ## Tâches manuelles
 
-Bien que la CLI permette d’effectuer la plupart des actions attendues d’un gestionnaire de stockage en ligne, quelques unes sont plus complexes que les autres voire impossibles. Elles sont résumées dans le tableau ci-dessous.
+La CLI permet d’effectuer la plupart des actions attendues d’un gestionnaire de stockage en ligne, cependant certaines sont plus complexes, voire impossibles et doivent être effectuées depuis l’interface web de YahooMail. Elles sont résumées dans le tableau ci-dessous.
 
-|        Action        | Comment l’effectuer                                         |
-| :------------------: | ----------------------------------------------------------- |
-|   Créer un dossier   | Utiliser une commande en ciblant le dossier voulu avec `-f` |
-| Supprimer un dossier | Impossible                                                  |
+|        Action        | Comment l’effectuer                     |
+| :------------------: | --------------------------------------- |
+| Supprimer un dossier | Impossible depuis la CLI pour le moment |
 
 ## Motivation
 
-YahooMail propose 1To de stockage de mail gratuit, mais restreint la taille des pièces jointes. 1To de stockage en ligne gratuit n’étant pas négligeable de nos jours, ce projet est né de la volonté de profiter de ce stockage sans limite de taille de fichier.
+YahooMail propose 1To de stockage de mail gratuit, mais restreint la taille des pièces jointes à environ 29Mo. À but éducatif, cet outil est né de la volonté d’exploiter ce stockage sans limite de taille de fichier.
