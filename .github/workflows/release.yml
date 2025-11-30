@@ -1,0 +1,25 @@
+name: Build and release
+
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7.1.4
+
+      - name: Build
+        run: uv build
+
+      - name: Release
+        uses: softprops/action-gh-release@v2.4.2
+        with:
+          files: |
+            dist/
