@@ -168,7 +168,9 @@ class YahooMailDrive:
                 )
                 logger.debug(f"Wrote {written_bytes_count} bytes")
 
-            print_progress(progress_text, total_chunks, total_chunks)
+            print_progress(
+                progress_text, total_chunks, total_chunks, final_newline=True
+            )
 
         # Récupère le nom des fichiers téléversés et
         # les infos sur les mails de leurs morceaux
@@ -279,7 +281,9 @@ class YahooMailDrive:
             print_progress(progress_text, start_chunk, needed_chunks_count)
             self._ym_api.save_mail(msg, self._target_folder)
 
-        print_progress(progress_text, needed_chunks_count, needed_chunks_count)
+        print_progress(
+            progress_text, needed_chunks_count, needed_chunks_count, final_newline=True
+        )
 
     def remove(self, file_name: str) -> None:
         """

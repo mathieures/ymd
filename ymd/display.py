@@ -47,10 +47,15 @@ def print_files_list(
     print(header_str + "\n".join(column_separator.join(line) for line in lines))
 
 
-def print_progress(text: str, current: int, target: int) -> None:
+def print_progress(
+    text: str, current: int, target: int, *, final_newline: bool = False
+) -> None:
     """
     Affiche le progrès en fonction du progrès actuel et de la cible
     donnés, préfixés par le texte donné en effaçant le texte précédent.
     """
     percentage = current / target * 100
-    print(f"\r{text} {current}/{target} ({percentage:.1f}%)", end="")
+    print(
+        f"\r{text} {current}/{target} ({percentage:.1f}%)",
+        end="\n" if final_newline else "",
+    )
