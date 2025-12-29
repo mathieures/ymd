@@ -4,7 +4,7 @@ Outil en ligne de commandes permettant de stocker des fichiers sur YahooMail.
 
 ## Prérequis
 
-- Python ⩾ 3.13 (les versions précédentes n’ont pas été testées)
+- Python ⩾ 3.14 (les versions précédentes n’ont pas été testées)
 - Un fichier `credentials.toml` contenant les clés `address` et `password` (voir [la documentation pour générer un mot de passe d’application](https://login.yahoo.com/account/security?.lang=fr-FR&.intl=fr&.src=yhelp))
 
 ## Utilisation
