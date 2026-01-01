@@ -3,9 +3,7 @@ import email.mime.application
 import email.mime.multipart
 import logging
 import typing
-from io import BufferedReader, BufferedWriter
 from pathlib import Path
-from types import TracebackType
 
 from ymd import file_utils, mail_utils
 from ymd.display import print_progress
@@ -15,6 +13,10 @@ from ymd.exceptions import (
     YMDFilesRetrievalError,
     YMDMailsRetrievalError,
 )
+
+if typing.TYPE_CHECKING:
+    from io import BufferedReader, BufferedWriter
+    from types import TracebackType
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +93,7 @@ class YahooMailDrive:
         Retourne l’objet qu’un mail doit avoir pour le fichier
         au chemin donné et pour l’indice du morceau donné.
         """
-        # On commence à compter les morceaux à 1, mais cela pourrait changer
-        # return f"{file_name}.part{chunk_index}"
+        # Note : arbitrairement, on commence à compter les morceaux à partir de 1.
         return f"{file_name}.part{chunk_index + 1}"
 
     def _get_file_name_from_subject(self, subject: str) -> str | None:
@@ -199,11 +200,80 @@ class YahooMailDrive:
         if dst_path_or_buffer is not None:
             _download_file_into(file_name, dst_path_or_buffer)
 
-    def upload(
+    def upload_file_or_folder_recursively(
+        self,
+        file_or_folder_path: Path,
+        source_buffer: BufferedReader | None = None,
+        start_chunk: int = 0,
+        local_base_folder: str | None = None,
+    ) -> None:
+        """
+        Téléverse le fichier ou le dossier dont le chemin est
+        donné en paramètre, ou le contenu du buffer donné.
+        Le chemin donné est utilisé pour lire le contenu, mais aussi pour
+        définir le nom du fichier/dossier une fois le contenu téléversé.
+        Si un numéro de morceau est donné, le téléversement commencera à partir de
+        celui-ci au lieu du début (0 signifie « commencer au premier morceau »).
+        Peut lever les exceptions suivantes :
+        - FileNotFoundError si le fichier ou dossier donné n’est pas trouvé localement
+        - YMDChunkAlreadyExists si le fichier existe déjà sur le serveur
+        """
+
+        if source_buffer is None and not file_or_folder_path.exists():
+            raise FileNotFoundError(file_or_folder_path)
+
+        # Si le chemin donné pointe vers un fichier, on peut le téléverser directement
+        if not file_or_folder_path.is_dir():
+            self._upload_file_or_buffer(
+                file_or_folder_path,
+                buffer=source_buffer,
+                start_chunk=start_chunk,
+            )
+            return
+
+        # Sinon c’est un dossier donc on le téléverse récursivement
+        logger.debug(f"Uploading folder {file_or_folder_path} recursively")
+
+        # Sauvegarde le nom du dossier local duquel on part, pour pouvoir
+        # le supprimer du chemin de chacun de ses fichiers et sous-dossiers
+        if local_base_folder is None:
+            local_base_folder = str(file_or_folder_path)
+
+        folder_content = tuple(file_or_folder_path.iterdir())
+        for inner_file_or_folder in folder_content:
+            if inner_file_or_folder.is_dir():
+                logger.debug(f"Descending into subfolder: {inner_file_or_folder}")
+                previous_target_folder = self.target_folder
+
+                # Crée le sous-dossier nécessaire
+                self.target_folder = f"{self.target_folder}/{inner_file_or_folder.name}"
+
+                self.upload_file_or_folder_recursively(
+                    inner_file_or_folder,
+                    source_buffer=source_buffer,
+                    start_chunk=start_chunk,
+                    local_base_folder=local_base_folder,
+                )
+
+                self.target_folder = previous_target_folder
+            else:
+                try:
+                    self._upload_file_or_buffer(
+                        inner_file_or_folder,
+                        buffer=source_buffer,
+                        start_chunk=start_chunk,
+                    )
+                except YMDChunkAlreadyExists:
+                    logger.exception(
+                        f"Error while trying to upload file {inner_file_or_folder}"
+                    )
+                    break
+
+    def _upload_file_or_buffer(
         self,
         file_path: Path,
-        buffer: BufferedReader | None = None,
-        start_chunk: int = 0,
+        buffer: BufferedReader | None,
+        start_chunk: int,
     ) -> None:
         """
         Téléverse le fichier dont le chemin est donné en paramètre ou le

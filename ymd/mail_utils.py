@@ -195,7 +195,7 @@ class YahooMailAPI:
         logger.debug(f"Retrieving all mails in folder: {folder_name}")
         self._select_folder(folder_name)
 
-        logger.debug("Searching for UIDs")
+        logger.debug("Searching for mail UIDs")
         # Récupère la liste des ID des mails présents dans le dossier
         _status, data = self._imap_connection.uid("SEARCH", "ALL")
         mail_ids: bytes | None = data[0]
@@ -203,7 +203,7 @@ class YahooMailAPI:
             raise YMDMailsRetrievalError(folder_name, server_reply=data)
 
         mail_ids_str = mail_ids.decode().split()
-        logger.debug(f"Retrieved mail IDs: {mail_ids_str}")
+        logger.debug(f"Retrieved mail UIDs: {mail_ids_str}")
 
         result = []
 

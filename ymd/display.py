@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 
 def print_files_list(
-    files_data: dict[str, list["Mail"]], *, long: bool, column_separator: str = " "
+    files_data: dict[str, list[Mail]], *, long: bool, column_separator: str = " "
 ) -> None:
     """Affiche la liste de fichiers donnée avec un en-tête."""
 

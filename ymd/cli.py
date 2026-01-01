@@ -28,7 +28,7 @@ def callback_download_command(args: argparse.Namespace, ymd: YahooMailDrive) -> 
 
 def callback_upload_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "upload" de la CLI."""
-    ymd.upload(Path(args.file), start_chunk=args.start_chunk)
+    ymd.upload_file_or_folder_recursively(Path(args.file), start_chunk=args.start_chunk)
 
 
 def callback_remove_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
@@ -85,7 +85,7 @@ def main() -> None:
 
     # upload
     upload_command_parser = subparsers.add_parser("upload", aliases=["u"])
-    upload_command_parser.add_argument("file", help="path of the file to upload")
+    upload_command_parser.add_argument("file", help="path of the file/folder to upload")
     upload_command_parser.add_argument(
         "--start-chunk",
         type=int,
