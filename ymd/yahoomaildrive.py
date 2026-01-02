@@ -114,16 +114,23 @@ class YahooMailDrive:
         """Retourne la liste de tous les dossiers disponibles."""
         return self._ym_api.get_all_folders()
 
-    def get_files_data(self) -> dict[str, list[mail_utils.Mail]]:
+    def _get_files_data_in_folder(
+        self,
+        folder_name: str,
+        dict_key_prefix: str | None = None,
+    ) -> dict[str, list[mail_utils.Mail]]:
         """
         Retourne un dictionnaire de fichiers téléversés associant
         leur nom à une liste contenant les mails de leurs morceaux.
+        Optionnellement, préfixe le nom des fichiers par ce qui est donné.
+        Peut lever l’exception suivante :
+        - YMDFilesRetrievalError si les fichiers n’ont pas pu être récupérés
         """
         # Récupère la liste de tous les morceaux
         try:
-            mails = self._ym_api.get_all_mails(self._target_folder)
+            mails = self._ym_api.get_all_mails(folder_name)
         except YMDMailsRetrievalError as err:
-            raise YMDFilesRetrievalError(self._target_folder) from err
+            raise YMDFilesRetrievalError(folder_name) from err
 
         result = {}
         # Pour chaque mail, extrait le nom de fichier situé dans son objet
@@ -137,10 +144,49 @@ class YahooMailDrive:
                 continue
 
             # Sinon, ajoute le mail à la liste associée au nom du fichier
-            if file_name not in result:
-                result[file_name] = [mail]
+            dict_key = (
+                file_name
+                if dict_key_prefix is None
+                else f"{dict_key_prefix}{file_name}"
+            )
+            if dict_key not in result:
+                result[dict_key] = [mail]
             else:
-                result[file_name].append(mail)
+                result[dict_key].append(mail)
+
+        return result
+
+    def get_files_data(
+        self, *, recurse: bool = False
+    ) -> dict[str, list[mail_utils.Mail]]:
+        """
+        Retourne un dictionnaire de fichiers téléversés dans le dossier cible
+        associant leur nom à une liste contenant les mails de leurs morceaux.
+        Optionnellement, fait cette action récursivement dans le dossier cible.
+        Peut lever l’exception suivante :
+        - YMDFilesRetrievalError si les fichiers n’ont pas pu être récupérés
+        """
+        result = self._get_files_data_in_folder(self.target_folder)
+
+        # Récupère les sous-dossiers si on doit récupérer leurs données
+        if recurse:
+            subfolders = (
+                folder
+                for folder in self.get_folders()
+                if folder.startswith(self.target_folder)
+                and folder != self.target_folder
+            )
+            for subfolder in subfolders:
+                # Détermine le préfixe des clés du dictionnaire (le
+                # dossier parent des fichiers, relatif au dossier cible)
+                relative_folder = f"{subfolder.removeprefix(f'{self.target_folder}/')}/"
+
+                result.update(
+                    self._get_files_data_in_folder(
+                        subfolder,
+                        dict_key_prefix=relative_folder,
+                    )
+                )
 
         return result
 
