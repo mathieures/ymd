@@ -133,6 +133,7 @@ class YahooMailDrive:
             raise YMDFilesRetrievalError(folder_name) from err
 
         result = {}
+
         # Pour chaque mail, extrait le nom de fichier situé dans son objet
         for mail in mails:
             file_name = self._get_file_name_from_subject(mail.subject)
@@ -157,36 +158,54 @@ class YahooMailDrive:
         return result
 
     def get_files_data(
-        self, *, recurse: bool = False
+        self,
+        *,
+        max_recursion_depth: int | None = None,
     ) -> dict[str, list[mail_utils.Mail]]:
         """
         Retourne un dictionnaire de fichiers téléversés dans le dossier cible
         associant leur nom à une liste contenant les mails de leurs morceaux.
-        Optionnellement, fait cette action récursivement dans le dossier cible.
+        Si une profondeur de récursion est donnée, affiche les fichiers et
+        sous-dossiers ayant une profondeur inférieure ou égale ; sinon,
+        affiche tous les fichiers et sous-dossiers de l’arborescence.
         Peut lever l’exception suivante :
         - YMDFilesRetrievalError si les fichiers n’ont pas pu être récupérés
         """
         result = self._get_files_data_in_folder(self.target_folder)
 
-        # Récupère les sous-dossiers si on doit récupérer leurs données
-        if recurse:
-            subfolders = (
-                folder
-                for folder in self.get_folders()
-                if folder.startswith(self.target_folder)
-                and folder != self.target_folder
-            )
-            for subfolder in subfolders:
-                # Détermine le préfixe des clés du dictionnaire (le
-                # dossier parent des fichiers, relatif au dossier cible)
-                relative_folder = f"{subfolder.removeprefix(f'{self.target_folder}/')}/"
+        # Récupère le nom de tous les sous-dossiers
+        subfolders = (
+            folder
+            for folder in self.get_folders()
+            if folder.startswith(self.target_folder) and folder != self.target_folder
+        )
 
-                result.update(
-                    self._get_files_data_in_folder(
-                        subfolder,
-                        dict_key_prefix=relative_folder,
-                    )
+        for subfolder in subfolders:
+            # Détermine le préfixe des clés du dictionnaire (le
+            # dossier parent des fichiers, relatif au dossier cible)
+            relative_folder = f"{subfolder.removeprefix(f'{self.target_folder}/')}/"
+
+            # Note: sujet aux faux-positifs si un dossier contient des "/"
+            depth = relative_folder.count("/")
+
+            # Si le sous-dossier est à la profondeur
+            # maximale, on l’affiche mais pas son contenu
+            if max_recursion_depth is not None and depth == max_recursion_depth:
+                # Ajoute un élément avec 0 morceau
+                result.update({relative_folder: []})
+                continue
+
+            # Si sa profondeur est supérieure à la
+            # profondeur maximale, on ne l’affiche pas
+            if max_recursion_depth is not None and depth > max_recursion_depth:
+                continue
+
+            result.update(
+                self._get_files_data_in_folder(
+                    subfolder,
+                    dict_key_prefix=relative_folder,
                 )
+            )
 
         return result
 
@@ -245,6 +264,95 @@ class YahooMailDrive:
         # Sinon un buffer de destination est donné, alors on écrit dedans
         if dst_path_or_buffer is not None:
             _download_file_into(file_name, dst_path_or_buffer)
+
+    def _upload_file_or_buffer(
+        self,
+        file_path: Path,
+        buffer: BufferedReader | None,
+        start_chunk: int,
+        progress_text_override: str | None = None,
+    ) -> None:
+        """
+        Téléverse le fichier dont le chemin est donné en paramètre ou le
+        contenu du buffer donné en le découpant en plusieurs morceaux s’il
+        est plus gros que la taille maximale autorisée pour les pièces jointes.
+        Le chemin donné est également utilisé pour déterminer
+        le nom du fichier sur le serveur une fois téléversé.
+        Si un numéro de morceau est donné, commence le
+        téléversement à partir de celui-ci au lieu du début.
+        Peut lever l’exception suivante :
+        - YMDChunkAlreadyExists si le fichier existe déjà sur le serveur
+        """
+
+        def _create_attachment_with_buffer(
+            buffer: BufferedReader, chunk_index: int
+        ) -> email.mime.application.MIMEApplication:
+            """
+            Retourne une pièce jointe créée avec le morceau du contenu
+            du buffer correspondant à l’indice donné en paramètre.
+            """
+            return email.mime.application.MIMEApplication(
+                file_utils.load_chunk(
+                    buffer,
+                    chunk_start=chunk_index * self._ym_api.MAX_ATTACHMENT_SIZE,
+                    chunk_end=(chunk_index + 1) * self._ym_api.MAX_ATTACHMENT_SIZE,
+                ),
+                _subtype=file_path.name.split(".")[-1],
+            )
+
+        # Vérifie si un morceau de fichier existe déjà sur le serveur
+        # possédant le même nom que le morceau qui va être téléversé
+        logger.debug(f"Checking the existence of {file_path.name} on the server")
+        files_data = self.get_files_data()
+        first_subject = self._get_subject_for_file_chunk(file_path.name, start_chunk)
+        already_present_subjects = [
+            mail.subject for mail in files_data.get(file_path.name, [])
+        ]
+
+        # S’il existe déjà, on s’arrête
+        if first_subject in already_present_subjects:
+            raise YMDChunkAlreadyExists(first_subject)
+
+        # Pour chaque indice de début de morceau de fichier
+        needed_chunks_count = self._get_chunk_count_for_file(file_path, buffer=buffer)
+        logger.debug(f"{needed_chunks_count} chunk(s) will be needed")
+
+        progress_text = (
+            progress_text_override if progress_text_override else "Uploaded chunk(s):"
+        )
+
+        for chunk_index in range(start_chunk, needed_chunks_count):
+            attachment_name = self._get_subject_for_file_chunk(
+                file_path.name, chunk_index
+            )
+
+            # Crée un nouveau mail
+            msg = email.mime.multipart.MIMEMultipart()
+
+            # Définit l’objet comme le nom du morceau pour tous les retrouver facilement
+            # Note : l’expéditeur et le destinataire ne sont pas nécessaires
+            msg["Subject"] = attachment_name
+
+            # Ajoute la pièce jointe
+            if buffer is None:
+                with file_path.open("rb") as file:
+                    attachment = _create_attachment_with_buffer(file, chunk_index)
+            else:
+                attachment = _create_attachment_with_buffer(buffer, chunk_index)
+
+            attachment.add_header(
+                "Content-Disposition", "attachment", filename=attachment_name
+            )
+            msg.attach(attachment)
+
+            # Ajoute le mail au dossier
+            logger.debug(f"Uploading email {attachment_name}")
+            print_progress(progress_text, start_chunk, needed_chunks_count)
+            self._ym_api.save_mail(msg, self._target_folder)
+
+        print_progress(
+            progress_text, needed_chunks_count, needed_chunks_count, final_newline=True
+        )
 
     def upload_file_or_folder_recursively(
         self,
@@ -308,98 +416,13 @@ class YahooMailDrive:
                         inner_file_or_folder,
                         buffer=source_buffer,
                         start_chunk=start_chunk,
+                        progress_text_override=f"{inner_file_or_folder}:",
                     )
                 except YMDChunkAlreadyExists:
                     logger.exception(
                         f"Error while trying to upload file {inner_file_or_folder}"
                     )
                     break
-
-    def _upload_file_or_buffer(
-        self,
-        file_path: Path,
-        buffer: BufferedReader | None,
-        start_chunk: int,
-    ) -> None:
-        """
-        Téléverse le fichier dont le chemin est donné en paramètre ou le
-        contenu du buffer donné en le découpant en plusieurs morceaux s’il
-        est plus gros que la taille maximale autorisée pour les pièces jointes.
-        Le chemin donné est également utilisé pour déterminer
-        le nom du fichier sur le serveur une fois téléversé.
-        Si un numéro de morceau est donné, commence le
-        téléversement à partir de celui-ci au lieu du début.
-        Peut lever l’exception suivante :
-        - YMDChunkAlreadyExists si le fichier existe déjà sur le serveur
-        """
-
-        def _create_attachment_with_buffer(
-            buffer: BufferedReader, chunk_index: int
-        ) -> email.mime.application.MIMEApplication:
-            """
-            Retourne une pièce jointe créée avec le morceau du contenu
-            du buffer correspondant à l’indice donné en paramètre.
-            """
-            return email.mime.application.MIMEApplication(
-                file_utils.load_chunk(
-                    buffer,
-                    chunk_start=chunk_index * self._ym_api.MAX_ATTACHMENT_SIZE,
-                    chunk_end=(chunk_index + 1) * self._ym_api.MAX_ATTACHMENT_SIZE,
-                ),
-                _subtype=file_path.name.split(".")[-1],
-            )
-
-        # Vérifie si un morceau de fichier existe déjà sur le serveur
-        # possédant le même nom que le morceau qui va être téléversé
-        logger.debug(f"Checking the existence of {file_path.name} on the server")
-        files_data = self.get_files_data()
-        first_subject = self._get_subject_for_file_chunk(file_path.name, start_chunk)
-        already_present_subjects = [
-            mail.subject for mail in files_data.get(file_path.name, [])
-        ]
-
-        # S’il existe déjà, on s’arrête
-        if first_subject in already_present_subjects:
-            raise YMDChunkAlreadyExists(first_subject)
-
-        # Pour chaque indice de début de morceau de fichier
-        needed_chunks_count = self._get_chunk_count_for_file(file_path, buffer=buffer)
-        logger.debug(f"{needed_chunks_count} chunk(s) will be needed")
-
-        progress_text = "Uploaded chunk(s):"
-
-        for chunk_index in range(start_chunk, needed_chunks_count):
-            attachment_name = self._get_subject_for_file_chunk(
-                file_path.name, chunk_index
-            )
-
-            # Crée un nouveau mail
-            msg = email.mime.multipart.MIMEMultipart()
-
-            # Définit l’objet comme le nom du morceau pour tous les retrouver facilement
-            # Note : l’expéditeur et le destinataire ne sont pas nécessaires
-            msg["Subject"] = attachment_name
-
-            # Ajoute la pièce jointe
-            if buffer is None:
-                with file_path.open("rb") as file:
-                    attachment = _create_attachment_with_buffer(file, chunk_index)
-            else:
-                attachment = _create_attachment_with_buffer(buffer, chunk_index)
-
-            attachment.add_header(
-                "Content-Disposition", "attachment", filename=attachment_name
-            )
-            msg.attach(attachment)
-
-            # Ajoute le mail au dossier
-            logger.debug(f"Uploading email {attachment_name}")
-            print_progress(progress_text, start_chunk, needed_chunks_count)
-            self._ym_api.save_mail(msg, self._target_folder)
-
-        print_progress(
-            progress_text, needed_chunks_count, needed_chunks_count, final_newline=True
-        )
 
     def remove(self, file_name: str) -> None:
         """

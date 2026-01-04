@@ -11,6 +11,9 @@ def print_files_list(
 ) -> None:
     """Affiche la liste de fichiers donnée avec un en-tête."""
 
+    if not files_data:
+        return
+
     # Liste des lignes qui seront affichées
     lines: list[tuple[str, ...]] = []
 
@@ -26,7 +29,9 @@ def print_files_list(
     for file_name, file_data in files_data.items():
         if long:
             chunks = f"{len(file_data):>{len(header[0])}}"
-            date = file_data[-1].date.strftime("%Y-%m-%d %H:%M")
+            date = (
+                file_data[-1].date.strftime("%Y-%m-%d %H:%M") if file_data else " " * 16
+            )
             line = (chunks, date, file_name)
             for i_col in range(len(header)):
                 header_lengths[i_col] = max(header_lengths[i_col], len(line[i_col]))

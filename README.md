@@ -43,13 +43,13 @@ De même qu’avec `pip`, la CLI pourra se lancer en exécutant `ymd`.
 
 Les commandes suivantes sont disponibles avec la CLI :
 
-| Commande                                     | Alias | Description                   |
-| -------------------------------------------- | ----- | ----------------------------- |
-| `list`                                       | `ls`  | Liste les fichiers téléversés |
-| `download <fichier_sur_yahoo> <destination>` | `d`   | Télécharge un fichier         |
-| `upload <fichier_local>`                     | `u`   | Téléverse un fichier          |
-| `remove <fichier_sur_yahoo>`                 | `rm`  | Supprime un fichier           |
-| `list-folders`                               | `lsf` | Liste les dossiers existants  |
+| Commande                                     | Alias | Description                               |
+| -------------------------------------------- | ----- | ----------------------------------------- |
+| `list`                                       | `ls`  | Liste les fichiers et dossiers téléversés |
+| `download <fichier_sur_yahoo> <destination>` | `d`   | Télécharge un fichier                     |
+| `upload <fichier_local>`                     | `u`   | Téléverse un fichier ou un dossier        |
+| `remove <fichier_sur_yahoo>`                 | `rm`  | Supprime un fichier                       |
+| `list-folders`                               | `lsf` | Liste les dossiers existants              |
 
 
 ### Arguments globaux
@@ -76,10 +76,22 @@ ymd upload ./exemple.txt
 ymd upload ./exemple.txt --folder dossier/sous-dossier
 ```
 
-### Lister les fichiers dans un sous-dossier (en le créant s’il n’existe pas)
+### Téléverser un dossier récursivement
+
+```sh
+ymd upload ./exemple/ --folder dossier/sous-dossier/exemple
+```
+
+### Lister les fichiers et sous-dossiers dans un dossier (en le créant s’il n’existe pas)
 
 ```sh
 ymd list --folder dossier/sous-dossier
+```
+
+### Lister les fichiers et sous-dossiers récursivement dans un dossier (en le créant s’il n’existe pas)
+
+```sh
+ymd list --folder dossier/sous-dossier --recurse
 ```
 
 ### Télécharger un fichier dans le dossier par défaut
@@ -94,13 +106,14 @@ ymd download exemple.txt ./exemple-téléchargé.txt
 ymd download exemple.txt téléchargé.txt --folder dossier/sous-dossier
 ```
 
-## Tâches manuelles
+## Autres actions
 
 La CLI permet d’effectuer la plupart des actions attendues d’un gestionnaire de stockage en ligne, cependant certaines sont plus complexes, voire impossibles et doivent être effectuées depuis l’interface web de YahooMail. Elles sont résumées dans le tableau ci-dessous.
 
-|        Action        | Comment l’effectuer                     |
-| :------------------: | --------------------------------------- |
-| Supprimer un dossier | Impossible depuis la CLI pour le moment |
+|            Action             | Comment l’effectuer                     |
+| :---------------------------: | --------------------------------------- |
+|     Supprimer un dossier      | Impossible depuis la CLI pour le moment |
+| Lister seulement les fichiers | Utiliser `--recurse` et `--max-depth 0` |
 
 ## Motivation
 

@@ -18,7 +18,11 @@ DEFAULT_CREDENTIALS_LOCATIONS = [
 
 def callback_list_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "list" de la CLI."""
-    print_files_list(ymd.get_files_data(recurse=args.recurse), long=args.long)
+    max_depth = args.max_depth if args.recurse else 1
+    print_files_list(
+        ymd.get_files_data(max_recursion_depth=max_depth),
+        long=args.long,
+    )
 
 
 def callback_download_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
@@ -78,6 +82,12 @@ def main() -> None:
         "--recurse",
         action="store_true",
         help="list files recursively",
+    )
+    list_command_parser.add_argument(
+        "-d",
+        "--max-depth",
+        type=int,
+        help="maximum recursive depth",
     )
     _add_global_arguments(list_command_parser)
     list_command_parser.set_defaults(callback=callback_list_command)
