@@ -1,8 +1,11 @@
 # Module permettant d’effectuer des actions sur des fichiers
 
 import tomllib
-from io import BufferedReader
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from io import BufferedReader
+    from pathlib import Path
 
 
 def load_chunk(buffer: BufferedReader, chunk_start: int, chunk_end: int) -> bytes:

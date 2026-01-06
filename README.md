@@ -108,12 +108,11 @@ ymd download exemple.txt téléchargé.txt --folder dossier/sous-dossier
 
 ## Autres actions
 
-La CLI permet d’effectuer la plupart des actions attendues d’un gestionnaire de stockage en ligne, cependant certaines sont plus complexes, voire impossibles et doivent être effectuées depuis l’interface web de YahooMail. Elles sont résumées dans le tableau ci-dessous.
+La CLI permet d’effectuer la plupart des actions attendues d’un gestionnaire de stockage en ligne, cependant certaines sont plus complexes et requièrent des arguments spéciaux, voire sont impossibles et doivent être effectuées depuis l’interface web de YahooMail. Elles sont résumées dans le tableau ci-dessous.
 
-|            Action             | Comment l’effectuer                     |
-| :---------------------------: | --------------------------------------- |
-|     Supprimer un dossier      | Impossible depuis la CLI pour le moment |
-| Lister seulement les fichiers | Utiliser `--recurse` et `--max-depth 0` |
+|                   Action                   | Comment l’effectuer                     |
+| :----------------------------------------: | --------------------------------------- |
+| Lister seulement les fichiers d’un dossier | Utiliser `--recurse` et `--max-depth 0` |
 
 ## Motivation
 

@@ -28,11 +28,31 @@ class YMDListResultExtractionError(YMDException):
 class YMDMailsRetrievalError(YMDException):
     def __init__(self, folder_name: str, server_reply: list) -> None:
         super().__init__(
-            f"Could not retrieve the mails in folder {folder_name}, "
+            f"Could not retrieve the mails in folder '{folder_name}', "
             f"the server's reply was invalid: {server_reply}."
         )
 
 
 class YMDFilesRetrievalError(YMDException):
     def __init__(self, folder_name: str) -> None:
-        super().__init__(f"Could not get the files data in {folder_name}.")
+        super().__init__(f"Could not get the files data in '{folder_name}'.")
+
+
+class YMDAmbiguousNameError(YMDException):
+    def __init__(self, ambiguous_name: str, target_folder: str) -> None:
+        super().__init__(
+            f"The name '{ambiguous_name}' is ambiguous and could target "
+            f"both a file in the folder '{target_folder}' or a folder."
+        )
+
+
+class YMDFolderDoesNotExistError(YMDException):
+    def __init__(self, folder_name: str) -> None:
+        super().__init__(f"Folder '{folder_name}' was not found on the server.")
+
+
+class YMDFolderIsNotEmptyError(YMDException):
+    def __init__(self, folder_name: str) -> None:
+        super().__init__(
+            f"Folder '{folder_name}' is not empty; enable recursion to force deletion."
+        )

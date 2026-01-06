@@ -1,3 +1,5 @@
+# Module permettant d’effectuer des actions de stockage de fichiers sur YahooMail
+
 import email
 import email.mime.application
 import email.mime.multipart
@@ -8,15 +10,20 @@ from pathlib import Path
 from ymd import file_utils, mail_utils
 from ymd.display import print_progress
 from ymd.exceptions import (
+    YMDAmbiguousNameError,
     YMDChunkAlreadyExists,
     YMDFileDoesNotExist,
     YMDFilesRetrievalError,
+    YMDFolderDoesNotExistError,
+    YMDFolderIsNotEmptyError,
     YMDMailsRetrievalError,
 )
+from ymd.yahoomail import YahooMailAPI
 
 if typing.TYPE_CHECKING:
     from io import BufferedReader, BufferedWriter
     from types import TracebackType
+
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +34,7 @@ class YahooMailDrive:
     lister, télécharger et téléverser des fichiers.
     """
 
-    _ym_api: mail_utils.YahooMailAPI
+    _ym_api: YahooMailAPI
     _target_folder: str  # Chemin du dossier où les mails seront stockés
 
     @property
@@ -43,7 +50,7 @@ class YahooMailDrive:
     def __init__(self, address: str, password: str, target_folder: str) -> None:
         # Sauvegarde la valeur brute du nom du dossier voulu par l’utilisateur
         self._target_folder = target_folder
-        self._ym_api = mail_utils.YahooMailAPI(address, password)
+        self._ym_api = YahooMailAPI(address, password)
         # Crée le dossier de destination dès le début
         # pour ne pas rencontrer de problème plus tard
         self._ym_api.create_folder(self._target_folder)
@@ -101,7 +108,7 @@ class YahooMailDrive:
         Retourne le nom du fichier extrait de l’objet de mail
         donné, ou None si un nom n’a pas pu être extrait.
         """
-        logger.debug(f"Parsing subject: {subject}")
+        logger.debug(f"Parsing subject: '{subject}'")
         partitioned_subject = subject.partition(".part")
 
         # Si l’objet du mail n’est pas comme prévu, ne retourne rien
@@ -140,7 +147,7 @@ class YahooMailDrive:
             # Si le nom n’a pas pu être extrait, on passe ce fichier
             if file_name is None:
                 logger.warning(
-                    f"Could not determine file name of chunk: {mail.subject}"
+                    f"Could not determine file name of chunk: '{mail.subject}'"
                 )
                 continue
 
@@ -156,6 +163,32 @@ class YahooMailDrive:
                 result[dict_key].append(mail)
 
         return result
+
+    def _get_subfolders(self, folder_name: str, *, reverse: bool = False) -> list[str]:
+        """
+        Retourne les sous-dossiers du dossier dont le
+        nom est donné, triés par profondeur ascendante.
+        Peut lever l’exception suivante :
+        - YMDFolderDoesNotExist si le dossier n’existe pas
+        """
+
+        def depth_key(folder_name: str) -> int:
+            return folder_name.count("/")
+
+        logger.debug(f"Getting subfolders of '{folder_name}'")
+
+        folders = self.get_folders()
+        if folder_name not in folders:
+            raise YMDFolderDoesNotExistError(folder_name)
+
+        subfolders = [
+            folder
+            for folder in folders
+            if folder.startswith(folder_name) and folder != folder_name
+        ]
+
+        subfolders.sort(key=depth_key, reverse=reverse)
+        return subfolders
 
     def get_files_data(
         self,
@@ -173,13 +206,12 @@ class YahooMailDrive:
         """
         result = self._get_files_data_in_folder(self.target_folder)
 
-        # Récupère le nom de tous les sous-dossiers
-        subfolders = (
-            folder
-            for folder in self.get_folders()
-            if folder.startswith(self.target_folder) and folder != self.target_folder
-        )
+        if max_recursion_depth is not None and max_recursion_depth <= 0:
+            return result
 
+        # Parcourt les sous-dossiers soit pour récupérer leurs fichiers, soit
+        # pour les ajouter à la liste en fonction de la profondeur de récursion
+        subfolders = self._get_subfolders(self.target_folder)
         for subfolder in subfolders:
             # Détermine le préfixe des clés du dictionnaire (le
             # dossier parent des fichiers, relatif au dossier cible)
@@ -225,7 +257,7 @@ class YahooMailDrive:
             progress_text = "Downloaded chunk(s):"
             total_chunks = len(files[file_name])
             for chunk_index, file_chunk_mail in enumerate(files[file_name]):
-                logger.debug(f"Downloading chunk: {file_chunk_mail.subject}")
+                logger.debug(f"Downloading chunk: '{file_chunk_mail.subject}'")
                 print_progress(progress_text, chunk_index, total_chunks)
 
                 # Télécharge la pièce jointe et écrit son contenu à la fin du fichier
@@ -396,7 +428,7 @@ class YahooMailDrive:
         folder_content = tuple(file_or_folder_path.iterdir())
         for inner_file_or_folder in folder_content:
             if inner_file_or_folder.is_dir():
-                logger.debug(f"Descending into subfolder: {inner_file_or_folder}")
+                logger.debug(f"Detected subfolder to upload: '{inner_file_or_folder}'")
                 previous_target_folder = self.target_folder
 
                 # Crée le sous-dossier nécessaire
@@ -424,25 +456,69 @@ class YahooMailDrive:
                     )
                     break
 
-    def remove(self, file_name: str) -> None:
+    def remove_file_or_folder_recursively(
+        self,
+        file_or_folder_name: str,
+        *,
+        recurse: bool = False,
+    ) -> None:
         """
-        Supprime le fichier dont le chemin est donné en paramètre
-        en supprimant tous les mails contenant ses morceaux.
+        Supprime le fichier ou dossier dont le chemin est donné en
+        paramètre en supprimant tous les mails contenant ses morceaux.
+        Si la récursion est activée, le dossier donné est supprimé
+        même s’il contient encore des fichiers ou sous-dossiers.
         Peut lever l’exception suivante :
         - YMDFileDoesNotExist si le fichier n’existe pas sur le serveur
+        - YMDFolderDoesNotExist si le dossier n’existe pas sur le serveur
         """
         # Récupère le nom des fichiers téléversés et
         # les infos sur les mails de leurs morceaux
-        logger.debug(f"Checking the existence of {file_name} on the server")
-        files = self.get_files_data()
-
-        # Si le fichier dont le nom est donné en paramètre n’est pas trouvé, on s’arrête
-        if file_name not in files:
-            raise YMDFileDoesNotExist(file_name)
-
-        self._ym_api.delete_mails(
-            files[file_name], self._target_folder, move_to_trash=True
+        logger.debug(
+            f"Trying to delete file {file_or_folder_name} "
+            f"from folder {self.target_folder}"
         )
+        files_data = self.get_files_data(max_recursion_depth=0)
+
+        if file_or_folder_name in files_data:
+            # Vérifie si un dossier avec le même nom existe, et lève une exception
+            # si c’est le cas (cela devrait éviter des erreurs de suppression)
+            if file_or_folder_name in self.get_folders():
+                raise YMDAmbiguousNameError(file_or_folder_name, self.target_folder)
+
+            self._ym_api.delete_mails(
+                files_data[file_or_folder_name], self.target_folder, move_to_trash=True
+            )
+            return
+
+        logger.debug(
+            f"File '{file_or_folder_name}' not found in folder"
+            f"'{self.target_folder}', trying to delete a folder instead"
+        )
+
+        # Si aucun dossier avec ce nom n’existe
+        if file_or_folder_name not in self.get_folders():
+            if recurse:
+                raise YMDFolderDoesNotExistError(file_or_folder_name)
+            raise YMDFileDoesNotExist(file_or_folder_name)
+
+        logger.debug(f"Found folder '{file_or_folder_name}'")
+
+        # Sinon, on a trouvé un dossier, donc on vérifie qu’il est vide
+        files_data = self._get_files_data_in_folder(file_or_folder_name)
+        if files_data and not recurse:
+            raise YMDFolderIsNotEmptyError(file_or_folder_name)
+
+        # Supprime tous les fichiers et sous-dossiers du dossier, puis lui-même
+        files_data_to_delete = []
+        for file_data in files_data.values():
+            files_data_to_delete.extend(file_data)
+        self._ym_api.delete_mails(
+            files_data_to_delete, self.target_folder, move_to_trash=True
+        )
+        for subfolder in self._get_subfolders(file_or_folder_name, reverse=True):
+            self._ym_api.delete_folder(subfolder)
+
+        self._ym_api.delete_folder(file_or_folder_name)
 
     def noop(self) -> None:
         """

@@ -37,7 +37,7 @@ def callback_upload_command(args: argparse.Namespace, ymd: YahooMailDrive) -> No
 
 def callback_remove_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "remove" de la CLI."""
-    ymd.remove(args.file)
+    ymd.remove_file_or_folder_recursively(args.file, recurse=bool(args.recurse))
 
 
 def callback_list_folders_command(
@@ -113,7 +113,15 @@ def main() -> None:
 
     # remove
     remove_command_parser = subparsers.add_parser("remove", aliases=["rm"])
-    remove_command_parser.add_argument("file", help="name of the remote file")
+    remove_command_parser.add_argument(
+        "file", help="name of the remote file/folder to delete"
+    )
+    remove_command_parser.add_argument(
+        "-r",
+        "--recurse",
+        action="store_true",
+        help="delete the folder recursively",
+    )
     _add_global_arguments(remove_command_parser)
     remove_command_parser.set_defaults(callback=callback_remove_command)
 
