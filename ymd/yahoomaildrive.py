@@ -273,7 +273,7 @@ class YahooMailDrive:
         # Récupère le nom des fichiers téléversés et
         # les infos sur les mails de leurs morceaux
         logger.debug(f"Checking the existence of {file_name} on the server")
-        files = self.get_files_data()
+        files = self.get_files_data(max_recursion_depth=0)
 
         # Si le fichier dont le nom est donné en paramètre n’est pas trouvé, on s’arrête
         if file_name not in files:
@@ -335,7 +335,7 @@ class YahooMailDrive:
         # Vérifie si un morceau de fichier existe déjà sur le serveur
         # possédant le même nom que le morceau qui va être téléversé
         logger.debug(f"Checking the existence of {file_path.name} on the server")
-        files_data = self.get_files_data()
+        files_data = self.get_files_data(max_recursion_depth=0)
         first_subject = self._get_subject_for_file_chunk(file_path.name, start_chunk)
         already_present_subjects = [
             mail.subject for mail in files_data.get(file_path.name, [])
