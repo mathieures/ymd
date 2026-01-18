@@ -32,7 +32,13 @@ def callback_download_command(args: argparse.Namespace, ymd: YahooMailDrive) -> 
 
 def callback_upload_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
     """Callback pour la commande "upload" de la CLI."""
-    ymd.upload_file_or_folder_recursively(Path(args.file), start_chunk=args.start_chunk)
+    try:
+        ymd.upload_file_or_folder_recursively(
+            Path(args.file),
+            start_chunk=args.start_chunk,
+        )
+    except KeyboardInterrupt:
+        print("\nUpload cancelled.")
 
 
 def callback_remove_command(args: argparse.Namespace, ymd: YahooMailDrive) -> None:
