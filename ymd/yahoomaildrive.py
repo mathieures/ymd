@@ -379,7 +379,7 @@ class YahooMailDrive:
 
             # Ajoute le mail au dossier
             logger.debug(f"Uploading email {attachment_name}")
-            print_progress(progress_text, start_chunk, needed_chunks_count)
+            print_progress(progress_text, chunk_index, needed_chunks_count)
             self._ym_api.save_mail(msg, self._target_folder)
 
         print_progress(
