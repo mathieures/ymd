@@ -151,7 +151,7 @@ class YahooMailDrive:
         except YMDMailsRetrievalError as err:
             raise YMDFilesRetrievalError(folder_name) from err
 
-        result = {}
+        result: dict[str, list[mail_utils.Mail]] = {}
 
         # Pour chaque mail, extrait le nom de fichier situé dans son objet
         for mail in mails:
@@ -419,7 +419,7 @@ class YahooMailDrive:
 
         # Téléverse un batch par connexion
         with concurrent.futures.ThreadPoolExecutor(workers) as executor:
-            futures = []
+            futures: list[concurrent.futures.Future] = []
             uploaded_chunks_count = 0
             for ym, batch in zip(self._ym, batches, strict=True):
                 futures.append(
@@ -563,7 +563,7 @@ class YahooMailDrive:
             raise YMDFolderIsNotEmptyError(file_or_folder_name)
 
         # Supprime tous les fichiers et sous-dossiers du dossier, puis lui-même
-        files_data_to_delete = []
+        files_data_to_delete: list[mail_utils.Mail] = []
         for file_data in files_data.values():
             files_data_to_delete.extend(file_data)
         self._ym[0].delete_mails(
