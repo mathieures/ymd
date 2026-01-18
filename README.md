@@ -117,3 +117,5 @@ La CLI permet d’effectuer la plupart des actions attendues d’un gestionnaire
 ## Motivation
 
 YahooMail propose 1To de stockage de mail gratuit, mais restreint la taille des pièces jointes à environ 29Mo. À but éducatif, cet outil est né de la volonté d’exploiter ce stockage sans limite de taille de fichier.
+
+À noter que depuis août 2025, [la limite de stockage est passée à 20Go](https://fr-ca.aide.yahoo.com/kb/SLN37064.html#cont1) et le nombre de connexions simultanées à 5 pour le protocole IMAP, que YMD utilise.
