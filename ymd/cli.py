@@ -36,6 +36,7 @@ def callback_upload_command(args: argparse.Namespace, ymd: YahooMailDrive) -> No
         ymd.upload_file_or_folder_recursively(
             Path(args.file),
             start_chunk=args.start_chunk,
+            workers=args.jobs,
         )
     except KeyboardInterrupt:
         print("\nUpload cancelled.")
@@ -66,6 +67,13 @@ def _add_global_arguments(parser: argparse.ArgumentParser) -> None:
         "--folder",
         help="name of the destination folder",
         default=YMD_FOLDER_NAME,
+    )
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        help="number of jobs (connections) to create (used only for upload)",
+        type=int,
+        default=1,
     )
     parser.add_argument("--debug", help="enable debug logs", action="store_true")
 
@@ -112,7 +120,7 @@ def main() -> None:
         "--start-chunk",
         type=int,
         default=0,
-        help="start upload from the given chunk number",
+        help="start upload from the given chunk number (0-indexed)",
     )
     _add_global_arguments(upload_command_parser)
     upload_command_parser.set_defaults(callback=callback_upload_command)
@@ -146,7 +154,7 @@ def main() -> None:
         parser.exit(1)
 
     # Effectue les actions globales avant l’exécution des commandes
-    # Si --debug est donné, active le debug
+    # Active le debug si l’argument est donné
     log_level = logging.DEBUG if args.debug else YMD_DEFAULT_LOG_LEVEL
     logging.basicConfig(format="%(levelname)s: %(message)s", level=log_level)
     # Charge les informations de connexion
@@ -155,7 +163,12 @@ def main() -> None:
     )
 
     # Effectue les actions déterminées par les arguments
-    with YahooMailDrive(address, password, target_folder=args.folder) as ymd:
+    with YahooMailDrive(
+        address,
+        password,
+        target_folder=args.folder,
+        connections=args.jobs,
+    ) as ymd:
         args.callback(args, ymd)
 
 

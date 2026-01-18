@@ -1,5 +1,6 @@
 # Module permettant d’effectuer des actions de stockage de fichiers sur YahooMail
 
+import concurrent.futures
 import email
 import email.mime.application
 import email.mime.multipart
@@ -32,9 +33,11 @@ class YahooMailDrive:
     """
     Classe permettant d’interagir avec YahooMail pour
     lister, télécharger et téléverser des fichiers.
+    Il est possible de créer plusieurs connexions simultanées
+    pour pouvoir effectuer plusieurs actions en même temps.
     """
 
-    _ym_api: YahooMailAPI
+    _ym: list[YahooMailAPI]  # Liste de connexions (le plus souvent 1) à YahooMail
     _target_folder: str  # Chemin du dossier où les mails seront stockés
 
     @property
@@ -44,16 +47,24 @@ class YahooMailDrive:
     @target_folder.setter
     def target_folder(self, folder_name: str) -> None:
         # Crée le dossier donné s’il n’existe pas
-        self._ym_api.create_folder(folder_name)
+        self._ym[0].create_folder(folder_name)
         self._target_folder = folder_name
 
-    def __init__(self, address: str, password: str, target_folder: str) -> None:
+    def __init__(
+        self, address: str, password: str, target_folder: str, *, connections: int = 1
+    ) -> None:
         # Sauvegarde la valeur brute du nom du dossier voulu par l’utilisateur
         self._target_folder = target_folder
-        self._ym_api = YahooMailAPI(address, password)
+
+        if connections <= 0:
+            msg = "Cannot create less than one connection to YahooMail"
+            raise ValueError(msg)
+
+        self._ym = [YahooMailAPI(address, password) for _ in range(connections)]
+
         # Crée le dossier de destination dès le début
         # pour ne pas rencontrer de problème plus tard
-        self._ym_api.create_folder(self._target_folder)
+        self._ym[0].create_folder(self._target_folder)
 
     def __enter__(self) -> typing.Self:
         return self
@@ -64,14 +75,15 @@ class YahooMailDrive:
         v: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        self._ym_api.__exit__(t, v, tb)
+        for connection in self._ym:
+            connection.__exit__(t, v, tb)
 
     def get_chunk_count_for_size(self, size: int) -> int:
         """
         Retourne le nombre de morceaux nécessaires au téléversement
         d’un fichier dont la taille est donnée en paramètre.
         """
-        return (size // self._ym_api.MAX_ATTACHMENT_SIZE) + 1
+        return (size // YahooMailAPI.MAX_ATTACHMENT_SIZE) + 1
 
     def _get_chunk_count_for_file(
         self, file_path: Path, buffer: BufferedReader | None = None
@@ -119,7 +131,7 @@ class YahooMailDrive:
 
     def get_folders(self) -> list[str]:
         """Retourne la liste de tous les dossiers disponibles."""
-        return self._ym_api.get_all_folders()
+        return self._ym[0].get_all_folders()
 
     def _get_files_data_in_folder(
         self,
@@ -135,7 +147,7 @@ class YahooMailDrive:
         """
         # Récupère la liste de tous les morceaux
         try:
-            mails = self._ym_api.get_all_mails(folder_name)
+            mails = self._ym[0].get_all_mails(folder_name)
         except YMDMailsRetrievalError as err:
             raise YMDFilesRetrievalError(folder_name) from err
 
@@ -262,7 +274,7 @@ class YahooMailDrive:
 
                 # Télécharge la pièce jointe et écrit son contenu à la fin du fichier
                 written_bytes_count = dst_buffer.write(
-                    self._ym_api.get_attachment_content_of_mail(file_chunk_mail)
+                    self._ym[0].get_attachment_content_of_mail(file_chunk_mail)
                 )
                 logger.debug(f"Wrote {written_bytes_count} bytes")
 
@@ -302,6 +314,7 @@ class YahooMailDrive:
         file_path: Path,
         buffer: BufferedReader | None,
         start_chunk: int,
+        workers: int,
         progress_text_override: str | None = None,
     ) -> None:
         """
@@ -316,7 +329,7 @@ class YahooMailDrive:
         - YMDChunkAlreadyExists si le fichier existe déjà sur le serveur
         """
 
-        def _create_attachment_with_buffer(
+        def create_attachment_with_buffer(
             buffer: BufferedReader, chunk_index: int
         ) -> email.mime.application.MIMEApplication:
             """
@@ -326,11 +339,50 @@ class YahooMailDrive:
             return email.mime.application.MIMEApplication(
                 file_utils.load_chunk(
                     buffer,
-                    chunk_start=chunk_index * self._ym_api.MAX_ATTACHMENT_SIZE,
-                    chunk_end=(chunk_index + 1) * self._ym_api.MAX_ATTACHMENT_SIZE,
+                    chunk_start=chunk_index * YahooMailAPI.MAX_ATTACHMENT_SIZE,
+                    chunk_end=(chunk_index + 1) * YahooMailAPI.MAX_ATTACHMENT_SIZE,
                 ),
                 _subtype=file_path.name.split(".")[-1],
             )
+
+        def upload_batch(batch: tuple[int, ...], connection: YahooMailAPI) -> None:
+            """
+            Téléverse les morceaux avec les indices
+            donnés avec la connexion donnée.
+            """
+            nonlocal uploaded_chunks_count  # Utilise la variable déclarée hors-fonction
+
+            for chunk_index in batch:
+                attachment_name = self._get_subject_for_file_chunk(
+                    file_path.name, chunk_index
+                )
+
+                # Crée un nouveau mail
+                msg = email.mime.multipart.MIMEMultipart()
+
+                # Définit l’objet comme le nom du morceau pour les identifier
+                # Note : l’expéditeur et le destinataire ne sont pas nécessaires
+                msg["Subject"] = attachment_name
+
+                # Ajoute la pièce jointe
+                if buffer is None:
+                    with file_path.open("rb") as file:
+                        attachment = create_attachment_with_buffer(file, chunk_index)
+                else:
+                    attachment = create_attachment_with_buffer(buffer, chunk_index)
+
+                attachment.add_header(
+                    "Content-Disposition", "attachment", filename=attachment_name
+                )
+                msg.attach(attachment)
+
+                # Ajoute le mail au dossier
+                logger.debug(f"Uploading email {attachment_name}")
+                print_progress(
+                    progress_text, uploaded_chunks_count, needed_chunks_count
+                )
+                connection.save_mail(msg, self._target_folder)
+                uploaded_chunks_count += 1
 
         # Vérifie si un morceau de fichier existe déjà sur le serveur
         # possédant le même nom que le morceau qui va être téléversé
@@ -353,34 +405,32 @@ class YahooMailDrive:
             progress_text_override if progress_text_override else "Uploaded chunk(s):"
         )
 
-        for chunk_index in range(start_chunk, needed_chunks_count):
-            attachment_name = self._get_subject_for_file_chunk(
-                file_path.name, chunk_index
-            )
+        chunks_indices = tuple(range(start_chunk, needed_chunks_count))
 
-            # Crée un nouveau mail
-            msg = email.mime.multipart.MIMEMultipart()
+        # Distribue les morceaux équitablement entre toutes les connexions
+        # Note : les nombres impairs causent des déséquilibres ; la ou
+        # les premières connexions prennent le surplus grâce au modulo.
+        batches_size = len(chunks_indices) // workers + len(chunks_indices) % workers
 
-            # Définit l’objet comme le nom du morceau pour tous les retrouver facilement
-            # Note : l’expéditeur et le destinataire ne sont pas nécessaires
-            msg["Subject"] = attachment_name
+        batches = [
+            chunks_indices[batches_size * i_batch : batches_size * (i_batch + 1)]
+            for i_batch in range(workers)
+        ]
 
-            # Ajoute la pièce jointe
-            if buffer is None:
-                with file_path.open("rb") as file:
-                    attachment = _create_attachment_with_buffer(file, chunk_index)
-            else:
-                attachment = _create_attachment_with_buffer(buffer, chunk_index)
+        # Téléverse un batch par connexion
+        with concurrent.futures.ThreadPoolExecutor(workers) as executor:
+            futures = []
+            uploaded_chunks_count = 0
+            for ym, batch in zip(self._ym, batches, strict=True):
+                futures.append(
+                    executor.submit(
+                        upload_batch,
+                        batch=batch,
+                        connection=ym,
+                    )
+                )
 
-            attachment.add_header(
-                "Content-Disposition", "attachment", filename=attachment_name
-            )
-            msg.attach(attachment)
-
-            # Ajoute le mail au dossier
-            logger.debug(f"Uploading email {attachment_name}")
-            print_progress(progress_text, chunk_index, needed_chunks_count)
-            self._ym_api.save_mail(msg, self._target_folder)
+            concurrent.futures.wait(futures)
 
         print_progress(
             progress_text, needed_chunks_count, needed_chunks_count, final_newline=True
@@ -392,6 +442,7 @@ class YahooMailDrive:
         source_buffer: BufferedReader | None = None,
         start_chunk: int = 0,
         local_base_folder: str | None = None,
+        workers: int = 1,
     ) -> None:
         """
         Téléverse le fichier ou le dossier dont le chemin est
@@ -414,6 +465,7 @@ class YahooMailDrive:
                 file_or_folder_path,
                 buffer=source_buffer,
                 start_chunk=start_chunk,
+                workers=workers,
             )
             return
 
@@ -439,6 +491,7 @@ class YahooMailDrive:
                     source_buffer=source_buffer,
                     start_chunk=start_chunk,
                     local_base_folder=local_base_folder,
+                    workers=workers,
                 )
 
                 self.target_folder = previous_target_folder
@@ -449,6 +502,7 @@ class YahooMailDrive:
                         buffer=source_buffer,
                         start_chunk=start_chunk,
                         progress_text_override=f"{inner_file_or_folder}:",
+                        workers=workers,
                     )
                 except YMDChunkAlreadyExists:
                     logger.exception(
@@ -485,7 +539,7 @@ class YahooMailDrive:
             if file_or_folder_name in self.get_folders():
                 raise YMDAmbiguousNameError(file_or_folder_name, self.target_folder)
 
-            self._ym_api.delete_mails(
+            self._ym[0].delete_mails(
                 files_data[file_or_folder_name], self.target_folder, move_to_trash=True
             )
             return
@@ -512,24 +566,26 @@ class YahooMailDrive:
         files_data_to_delete = []
         for file_data in files_data.values():
             files_data_to_delete.extend(file_data)
-        self._ym_api.delete_mails(
+        self._ym[0].delete_mails(
             files_data_to_delete, self.target_folder, move_to_trash=True
         )
         for subfolder in self._get_subfolders(file_or_folder_name, reverse=True):
-            self._ym_api.delete_folder(subfolder)
+            self._ym[0].delete_folder(subfolder)
 
-        self._ym_api.delete_folder(file_or_folder_name)
+        self._ym[0].delete_folder(file_or_folder_name)
 
     def noop(self) -> None:
         """
         Envoie un NOOP (NO OPeration) au serveur IMAP.
         N’a aucun effet, mais peut être utilisé pour ne pas subir de timeout.
         """
-        self._ym_api.noop()
+        for connection in self._ym:
+            connection.noop()
 
     def logout(self) -> None:
         """
         Clôt la connexion au serveur IMAP. Toutes  les commandes
         suivantes lèveront une erreur imaplib.IMAP4.error.
         """
-        self._ym_api.logout()
+        for connection in self._ym:
+            connection.logout()
